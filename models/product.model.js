@@ -1,0 +1,127 @@
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("../config/db.config.js");
+
+const Product = sequelize.define(
+  "Product",
+  {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    sellerId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      field: "seller_id",
+    },
+    categoryId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      field: "category_id",
+    },
+    name: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+      validate: {
+        notEmpty: true,
+        len: [2, 100],
+      },
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    price: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      validate: {
+        min: 0.01,
+      },
+    },
+    stockType: {
+      type: DataTypes.ENUM("limited", "unlimited"),
+      allowNull: false,
+      defaultValue: "unlimited",
+      field: "stock_type",
+    },
+    quantity: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      validate: {
+        min: 0,
+      },
+    },
+    image: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      defaultValue: "uploads/default-product.png",
+    },
+    status: {
+      type: DataTypes.ENUM("active", "hidden"),
+      allowNull: false,
+      defaultValue: "active",
+    },
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      field: "is_deleted",
+    },
+  },
+  {
+    tableName: "product",
+    timestamps: true,
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+    underscored: true,
+    validate: {
+      quantityValidation() {
+        if (
+          this.stockType === "limited" &&
+          (this.quantity === null || this.quantity === undefined)
+        ) {
+          throw new Error("Quantity is required for limited stock products");
+        }
+        if (this.stockType === "unlimited" && this.quantity != null) {
+          throw new Error("Quantity must be null for unlimited stock products");
+        }
+      },
+    },
+    indexes: [
+      { fields: ["name"] },
+      { fields: ["seller_id"] },
+      { fields: ["category_id"] },
+      { fields: ["status"] },
+      { fields: ["is_deleted"] },
+    ],
+  },
+);
+
+module.exports = Product;
+
+/*
+
+averageRating: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0,
+      field: "average_rating",
+    },
+
+    reviewsCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      field: "reviews_count",
+    },
+
+
+
+
+slug: {
+  type: DataTypes.STRING(150),
+  unique: true,
+  allowNull: false,
+}
+
+*/

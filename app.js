@@ -1,0 +1,25 @@
+require("dotenv").config();
+require("./models/associations");
+const express = require("express");
+const cookieParser = require("cookie-parser");
+const authRoute = require("./routes/auth.route.js");
+const apiResponse = require("./utils/apiResponse.util.js");
+const errorHandler = require("./middlewares/common/errorHandler.middleware.js");
+
+const app = express();
+
+app.use(express.json());
+app.use(cookieParser());
+
+app.use("/api/auth", authRoute);
+
+app.use((req, res, next) => {
+  apiResponse.sendFail(
+    res,
+    { message: "Route not found!" },
+    404
+  );
+});
+app.use(errorHandler);
+
+module.exports = app;
