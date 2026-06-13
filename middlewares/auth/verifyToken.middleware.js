@@ -1,7 +1,7 @@
 const { User } = require("../../models/associations.js");
 const token = require("../../utils/token.util.js");
 const AppError = require("../../utils/AppError.util.js");
-const { userStatus } = require("../../constants/userStatus.constant.js");
+const UserStatus = require("../../constants/userStatus.constant.js");
 
 const authenticateAccessToken = async (req, res, next) => {
   try {
@@ -24,7 +24,7 @@ const authenticateAccessToken = async (req, res, next) => {
       throw AppError.fail("User not found", 401);
     }
     
-    if (user.status === userStatus.BANNED) {
+    if (user.status === UserStatus.BANNED) {
       throw AppError.fail("Your account has been banned.", 403);
     }
     

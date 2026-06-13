@@ -215,13 +215,13 @@ const verifyEmail = async ({ email, code }) => {
 };
 
 const localLogin = async ({ email, password }, roleName) => {
-  const user = await User.findOne({
+  const user = await User.unscoped().findOne({
     where: { email },
-    attributes: { include: ["password"] },
     include: [{ model: Role, as: "role" }],
   });
 
   const roleLabel = roleName === userRoles.SELLER ? "seller" : "customer";
+  
   if (!user) {
     throw AppError.fail(`No ${roleLabel} account found with this email.`, 404);
   }
@@ -235,6 +235,18 @@ const localLogin = async ({ email, password }, roleName) => {
     throw AppError.fail(`No ${roleLabel} account found with this email.`, 404);
   }
   
+  if (!user.password) {
+    const authProvider = await UserAuthProvider.findOne({
+      where: { userId: user.id },
+    });
+    if (authProvider) {
+      throw AppError.fail(
+        `This account uses ${authProvider.provider} login. Please sign in with ${authProvider.provider}.`,
+        400,
+      );
+    }
+  }
+
   const isPasswordValid = await comparePassword(password, user.password);
   if (!isPasswordValid) {
     throw AppError.fail("Invalid email or password.", 401);
@@ -246,7 +258,7 @@ const localLogin = async ({ email, password }, roleName) => {
   if (user.status !== "active") {
     throw AppError.fail("Your account has been suspended. Please contact support.", 403);
   }
-  
+
   return await sequelize.transaction(async (transaction) => {
     const accessToken = token.signAccessToken({
       userId: user.id,
@@ -276,6 +288,8 @@ const localLogin = async ({ email, password }, roleName) => {
     return { user: safeUser, accessToken, refreshToken };
   });
 };
+
+
 
 const resendVerificationCode = async ({ email }) => {
   const result = await sequelize.transaction(async (transaction) => {

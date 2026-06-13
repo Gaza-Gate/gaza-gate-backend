@@ -4,6 +4,7 @@ const { REFRESH_TOKEN_EXPIRES_IN } = require("../constants/auth.constant.js");
 const apiResponse = require("../utils/apiResponse.util.js");
 const userRoles = require("../constants/userRoles.constant.js");
 const refreshTokenCookieOptions = require("../utils/cookieOptions.util.js");
+const AppError = require("../utils/AppError.util.js");
 
 const customerLocalRegister = async (req, res) => {
   const result = await authService.customerLocalRegister(req.body);
@@ -143,7 +144,7 @@ const sellerGoogleLogin = async (req, res) => {
 };
 
 const refreshAccessToken = async (req, res) => {
-  const oldRefreshToken = req.cookies?.refreshToken || req.body.refreshToken;
+  const oldRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
   if (!oldRefreshToken) {
     throw AppError.fail("Refresh token is required", 400);
   }
