@@ -5,6 +5,7 @@ const filterBody = require("../middlewares/common/filterBody.middleware.js");
 const authValidator = require("../middlewares/validators/auth.validator.js");
 const requestsValidator = require("../middlewares/validators/request.validator.js");
 const googleTokenVerifier = require("../middlewares/auth/googleTokenVerifier.js");
+const authenticateAccessToken = require("../middlewares/auth/verifyToken.middleware.js");
 
 const router = express.Router();
 
@@ -91,7 +92,7 @@ router.post(
 router.post(
   "/customer/google/register",
   filterBody(["token"]),
-  authValidator.socialLoginValidator,
+  authValidator.socialAuthValidator,
   requestsValidator,
   googleTokenVerifier,
   asyncWrapper(authController.customerGoogleRegister),
@@ -100,7 +101,7 @@ router.post(
 router.post(
   "/customer/google/login",
   filterBody(["token"]),
-  authValidator.socialLoginValidator,
+  authValidator.socialAuthValidator,
   requestsValidator,
   googleTokenVerifier,
   asyncWrapper(authController.customerGoogleLogin),
@@ -109,7 +110,7 @@ router.post(
 router.post(
   "/seller/google/register/init",
   filterBody(["token"]),
-  authValidator.socialLoginValidator,
+  authValidator.socialAuthValidator,
   requestsValidator,
   googleTokenVerifier,
   asyncWrapper(authController.sellerGoogleRegisterInit),
@@ -133,7 +134,7 @@ router.post(
 router.post(
   "/seller/google/login",
   filterBody(["token"]),
-  authValidator.socialLoginValidator,
+  authValidator.socialAuthValidator,
   requestsValidator,
   googleTokenVerifier,
   asyncWrapper(authController.sellerGoogleLogin),
@@ -141,10 +142,8 @@ router.post(
 
 router.post("/refresh-token", asyncWrapper(authController.refreshAccessToken));
 
-router.get(
-  "/me",
-  filterBody(["token"]),
-  asyncWrapper(authController.getCurrentUser),
-);
+router.post("/logout", asyncWrapper(authController.logout));
+
+router.post("/logout-all", authenticateAccessToken, asyncWrapper(authController.logoutAll));
 
 module.exports = router;

@@ -652,8 +652,13 @@ const customerGoogleRegister = async (payload) => {
       transaction,
     );
     
-    const safeUser = user.toJSON();
-    delete safeUser.password;
+    const safeUser = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: customerRole.name
+    };
     return {
       user: safeUser,
       accessToken,
@@ -671,14 +676,14 @@ const customerGoogleLogin = async (payload) => {
         provider: "google",
         providerId: payload.sub,
       },
-      include: [{ model: User }],
+      include: [{ model: User, as: "user" }],
       transaction,
     });
     if (!authProvider) {
       throw AppError.fail("No account found. Please register first.", 404);
     }
 
-    const user = authProvider.User;
+    const user = authProvider.user;
 
     const role = await Role.findByPk(user.roleId, { transaction });
     if (!role) {
@@ -716,8 +721,13 @@ const customerGoogleLogin = async (payload) => {
       transaction,
     );
 
-    const safeUser = user.toJSON();
-    delete safeUser.password;
+    const safeUser = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: role.name
+    };
     return { 
       user: safeUser,
       accessToken,
@@ -851,8 +861,13 @@ const sellerGoogleRegisterComplete = async (data) => {
       transaction,
     );
     
-    const safeUser = user.toJSON();
-    delete safeUser.password;
+    const safeUser = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: sellerRole.name
+    };
     return { 
       user: safeUser, 
       accessToken,
@@ -870,14 +885,14 @@ const sellerGoogleLogin = async (payload) => {
         provider: "google",
         providerId: payload.sub,
       },
-      include: [{ model: User }],
+      include: [{ model: User, as: "user" }],
       transaction,
     });
     if (!authProvider) {
       throw AppError.fail("No account found. Please register first.", 404);
     }
 
-    const user = authProvider.User;
+    const user = authProvider.user;
 
     const role = await Role.findByPk(user.roleId, { transaction });
     if (!role) {
@@ -915,9 +930,13 @@ const sellerGoogleLogin = async (payload) => {
       transaction,
     );
 
-    const safeUser = user.toJSON();
-    delete safeUser.password;
-
+    const safeUser = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: role.name
+    };
     return { user: safeUser, accessToken, refreshToken };
   });
 };
@@ -936,11 +955,13 @@ const saveRefreshToken = async (userId, refreshToken, transaction = null) => {
 };
 
 const refreshAccessToken = async (oldRefreshToken) => {
-  if (!oldRefreshToken) {
-    throw AppError.fail("Refresh token is required", 400);
+  let payload;
+  try {
+    payload = token.verifyRefreshToken(oldRefreshToken);
+  } catch (error) {
+    throw AppError.fail("Invalid or expired refresh token", 401);
   }
 
-  const payload = token.verifyRefreshToken(oldRefreshToken);
   if (!payload?.userId) {
     throw AppError.fail("Invalid refresh token payload", 401);
   }
@@ -949,63 +970,59 @@ const refreshAccessToken = async (oldRefreshToken) => {
 
   return await sequelize.transaction(async (t) => {
     const storedToken = await RefreshToken.findOne({
-      where: {
-        tokenHash: oldTokenHash,
-        userId: payload.userId,
-      },
+      where: { tokenHash: oldTokenHash, userId: payload.userId },
       transaction: t,
-      lock: Sequelize.Transaction.LOCK.UPDATE
+      lock: Sequelize.Transaction.LOCK.UPDATE,
     });
 
-    if (!storedToken) {
-      throw AppError.fail("Invalid refresh token", 401);
-    }
-    if (storedToken.expiresAt < new Date()) {
-      throw AppError.fail("Refresh token expired", 401);
-    }
-    if (storedToken.revokedAt) {
-      throw AppError.fail("Refresh token revoked", 400);
-    }
+    if (!storedToken) throw AppError.fail("Invalid refresh token", 401);
+    if (storedToken.expiresAt < new Date()) throw AppError.fail("Refresh token expired", 401);
+    if (storedToken.revokedAt) throw AppError.fail("Refresh token revoked", 401);
 
     const user = await User.findByPk(payload.userId, { transaction: t });
-    if (!user) {
-      throw AppError.fail("User not found", 404);
+    if (!user) throw AppError.fail("User not found", 404);
+    
+    if (user.status === userStatus.BANNED) {
+      throw AppError.fail("Your account has been banned.", 403);
     }
 
     const role = await Role.findByPk(user.roleId, { transaction: t });
-    if (!role) {
-      throw AppError.fail("User role not found", 404);
-    }
-
+    if (!role) throw AppError.fail("User role not found", 404);
+    
     storedToken.revokedAt = new Date();
     await storedToken.save({ transaction: t });
 
-    const newRefreshToken = token.signRefreshToken({
-      userId: user.id,
-      role: role.name,
-    });
-    const newRefreshTokenHash = hashToken(newRefreshToken);
-
+    const newRefreshToken = token.signRefreshToken({ userId: user.id, role: role.name });
     await RefreshToken.create(
       {
         userId: user.id,
-        tokenHash: newRefreshTokenHash,
+        tokenHash: hashToken(newRefreshToken),
         expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS),
       },
       { transaction: t },
     );
 
-    const newAccessToken = token.signAccessToken({
-      userId: user.id,
-      role: role.name,
-    });
+    const newAccessToken = token.signAccessToken({ userId: user.id, role: role.name });
 
-    return {
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-    };
+    return { accessToken: newAccessToken, refreshToken: newRefreshToken };
   });
 };
+
+const logout = async (refreshToken) => {
+  if (!refreshToken) return;
+
+  const tokenHash = hashToken(refreshToken);
+  await RefreshToken.destroy({
+    where: { tokenHash },
+  });
+};
+
+const logoutAll = async (userId) => {
+  await RefreshToken.destroy({
+    where: { userId },
+  });
+};
+
 
 module.exports = {
   customerLocalRegister,
@@ -1022,8 +1039,8 @@ module.exports = {
   sellerGoogleRegisterInit,
   sellerGoogleRegisterComplete,
   sellerGoogleLogin,
-
-  //getCurrentUser,
+  
   refreshAccessToken,
-  //logout,
+  logout,
+  logoutAll
 };

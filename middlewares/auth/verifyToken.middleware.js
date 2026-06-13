@@ -1,32 +1,43 @@
-const jwt = require("jsonwebtoken");
-const tokens = require("../utils/tokens.js");
+const { User } = require("../../models/associations.js");
+const token = require("../../utils/token.util.js");
+const AppError = require("../../utils/AppError.util.js");
+const { userStatus } = require("../../constants/userStatus.constant.js");
 
-const verifyToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  
-  if(!authHeader || !authHeader.startsWith("Bearer ")){
-    apiResponse.sendFail(
-      res,
-      data: { message: "Unauthorized" },
-      401
-    );
+const authenticateAccessToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      throw AppError.fail("Access token is required", 401);
+    }
+    
+    const accessToken = authHeader.split(" ")[1];
+    
+    let payload;
+    try {
+      payload = token.verifyAccessToken(accessToken);
+    } catch (error) {
+      throw AppError.fail("Invalid or expired access token", 401);
+    }
+    
+    const user = await User.findByPk(payload.userId);
+    if (!user) {
+      throw AppError.fail("User not found", 401);
+    }
+    
+    if (user.status === userStatus.BANNED) {
+      throw AppError.fail("Your account has been banned.", 403);
+    }
+    
+    req.user = {
+      id: user.id,
+      role: payload.role,
+      status: user.status,
+    };
+
+    next();
+  } catch (error) {
+    next(error);
   }
-  
-  const token = authHeader.split(" ")[1];
-  
-  try{
-    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-    req.user = decoded;
-  }
-  catch(error){
-    apiResponse.sendFail(
-      res,
-      data: { message: "Unauthorized" },
-      401
-    );
-  }
-  
-  next();
 };
 
-module.exports = verifyToken;
+module.exports = authenticateAccessToken;

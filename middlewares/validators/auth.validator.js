@@ -140,7 +140,7 @@ const resetPasswordValidator = [
     }),
 ];
 
-const socialLoginValidator = [
+const socialAuthValidator = [
   body("token")
     .exists({ checkFalsy: true })
     .withMessage("Token is required")
@@ -172,6 +172,6 @@ module.exports = {
   forgotPasswordValidator,
   verifyResetCodeValidator,
   resetPasswordValidator,
-  socialLoginValidator,
+  socialAuthValidator,
   sellerCompleteRegistrationValidator,
 };
