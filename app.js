@@ -5,6 +5,7 @@ const cookieParser = require("cookie-parser");
 const authRoute = require("./routes/auth.route.js");
 const apiResponse = require("./utils/apiResponse.util.js");
 const errorHandler = require("./middlewares/common/errorHandler.middleware.js");
+const sellerRoute=require("./routes/seller.route.js")
 
 const app = express();
 
@@ -12,6 +13,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use("/api/auth", authRoute);
+app.use("/api/seller",sellerRoute)
 
 app.use((req, res, next) => {
   apiResponse.sendFail(

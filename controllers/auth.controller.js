@@ -45,7 +45,7 @@ const verifyEmail = async (req, res) => {
   );
 };
 
-const customerLocalLogin = async (req, res) => {
+const customerLocalLogin = async (req, res,next) => {
   const result = await authService.localLogin(req.body, userRoles.CUSTOMER);
   res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
 
@@ -57,9 +57,10 @@ const customerLocalLogin = async (req, res) => {
     },
     200,
   );
+  next()
 };
 
-const sellerLocalLogin = async (req, res) => {
+const sellerLocalLogin = async (req, res,next) => {
   const result = await authService.localLogin(req.body, userRoles.SELLER);
   res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
 
@@ -71,6 +72,7 @@ const sellerLocalLogin = async (req, res) => {
     },
     200,
   );
+  next();
 };
 
 const resendVerificationCode = async (req, res) => {

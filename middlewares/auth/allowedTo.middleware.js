@@ -1,4 +1,5 @@
-const tokens = require("../utils/tokens.js");
+const tokens = require("../../utils/token.util");
+const apiResponse=require("../../utils/apiResponse.util")
 
 const allowedTo = (roles) => {
   return (req, res, next) => {
@@ -6,11 +7,11 @@ const allowedTo = (roles) => {
     const userRole = user.role;
 
     if (!user || !userRole) {
-      apiResponse.sendFail(res, { message: "Unauthorized" }, 401);
+     return apiResponse.sendFail(res, { message: "Unauthorized" }, 401);
     }
 
     if (!roles.includes(userRole)) {
-      apiResponse.sendFail(res, { message: "Unauthorized" }, 401);
+      return apiResponse.sendFail(res, { message: "Unauthorized" }, 401);
     }
 
     next();

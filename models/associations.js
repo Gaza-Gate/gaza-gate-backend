@@ -6,6 +6,10 @@ const Seller = require("./seller.model");
 const RefreshToken = require("./refreshToken.model");
 const PasswordResetSession = require("./passwordResetSession.model.js");
 const UserAuthProvider = require("./UserAuthProvider.model.js");
+const Product = require("./product.model.js");
+const Category=require('./category.model.js');
+const Order = require("./order.model.js");
+const OrderItem=require('./orderItem.model.js')
 
 Role.hasMany(User, {
   foreignKey: { name: "roleId", field: "role_id" },
@@ -84,6 +88,34 @@ PasswordResetSession.belongsTo(User, {
   as: "user",
 });
 
+Seller.hasMany(Product,{
+  foreignKey: { name: "sellerId", field: "seller_id" },
+  onDelete: "CASCADE",
+});
+
+Product.belongsTo(Seller,{
+  foreignKey:{name:"sellerId",field:"seller_id"}
+});
+
+Category.hasMany(Product, {
+  foreignKey: { name: "categoryId", field: "category_id" },
+  as: "products", 
+  onDelete: "CASCADE"
+});
+
+
+Product.belongsTo(Category, {
+  foreignKey: { name: "categoryId", field: "category_id" },
+  as: "category" 
+});
+
+Seller.hasMany(Order,{foreignKey:"sellerId",as:"orders"})
+
+Order.belongsTo(Seller,{foreignKey:"sellerId",as:"seller"})
+
+Product.belongsToMany(Order,{through:'OrderItem'});
+Order.belongsToMany(Product,{through:"OrderItem"});
+
 module.exports = {
   User,
   Role,
@@ -92,5 +124,8 @@ module.exports = {
   Seller,
   RefreshToken,
   UserAuthProvider,
-  PasswordResetSession
+  PasswordResetSession,
+  Product,
+  Category,
+  Order
 };

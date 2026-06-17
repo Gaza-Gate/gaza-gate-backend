@@ -34,7 +34,25 @@ const Seller = sequelize.define(
         len: [5, 500],
       },
     },
-  },
+   /* rating: {
+      type: DataTypes.DECIMAL(3, 2),
+      allowNull: true,
+      defaultValue: 0.00,
+      validate: {
+        min: 0,
+        max: 5,
+      },
+    },
+    ratingCount: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0,
+      field: "rating_count",
+      validate: {
+        min: 0,
+      },
+    },*/
+  }, 
   {
     tableName: "seller",
     timestamps: true,
@@ -48,25 +66,6 @@ module.exports = Seller;
 
 /*
 
-rating: {
-      type: DataTypes.DECIMAL(3, 2),
-      allowNull: false,
-      defaultValue: 0.00,
-      validate: {
-        min: 0,
-        max: 5,
-      },
-    },
-    ratingCount: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 0,
-      field: "rating_count",
-      validate: {
-        min: 0,
-      },
-    },
-    
     
     
         /*
