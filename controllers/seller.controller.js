@@ -20,7 +20,7 @@ const getSellerProfile=async(req,res)=>{
 }
 
 const updateSellerProfile=async(req,res)=>{
-   await sellerService.updateSellerProfile(req.user.id,req.body)
+   await sellerService.updateSellerProfile(req.user.id,req.body,req.file)
 
    return apiResponse.sendSuccess(res,{message:"profile update successfully"},201)
 }

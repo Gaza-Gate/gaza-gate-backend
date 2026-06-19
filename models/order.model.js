@@ -119,7 +119,7 @@ const Order = sequelize.define(
       defaultValue: 0,
       field: "discount_amount",
     },
-    deliveryFee: {
+    shippingFee: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
       defaultValue: 0,

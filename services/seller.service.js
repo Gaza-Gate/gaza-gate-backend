@@ -383,7 +383,7 @@ const updateOrder=async(userId,orderId,status)=>{
   const order = await Order.findOne({
     where: { id: orderId, sellerId: seller.id }
   });
-  if (!order) return new AppError().fail('Order not found', 404);
+  if (!order) throw new AppError().fail('Order not found', 404);
 
   await Order.update({status},{where:{id:orderId,sellerId:seller.id}})
 
