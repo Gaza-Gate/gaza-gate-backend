@@ -9,11 +9,11 @@ const Cart = sequelize.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    userId: {
+    customerId: {
       type: DataTypes.UUID,
       allowNull: false,
       unique: true,
-      field: "user_id",
+      field: "customer_id",
     },
   },
   {

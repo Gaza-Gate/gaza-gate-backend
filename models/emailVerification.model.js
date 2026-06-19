@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db.config.js");
+const { VERIFICATION_TYPES } = require("../constants/auth.constant.js");
 
 const EmailVerification = sequelize.define(
   "EmailVerification",
@@ -19,9 +20,12 @@ const EmailVerification = sequelize.define(
       allowNull: false,
     },
     type: {
-      type: DataTypes.STRING(30),
+      type: DataTypes.ENUM(
+        VERIFICATION_TYPES.EMAIL_ACTIVATE,
+        VERIFICATION_TYPES.PASSWORD_RESET
+      ),
       allowNull: false,
-      defaultValue: "email_activation",
+      defaultValue: VERIFICATION_TYPES.EMAIL_ACTIVATE,
     },
     expiresAt: {
       type: DataTypes.DATE,
