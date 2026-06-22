@@ -74,4 +74,6 @@ router.get("/orders/:orderId",isauthenticated,asyncWrapper(sellerController.getO
 // update the seller's order status 
 router.put("/orders/:orderId",isauthenticated,filterBody(['status']),sellerValidator.updateOrderStatus,requestsValidator,asyncWrapper(sellerController.updateOrder))
 
+router.get("/reviews",isauthenticated,asyncWrapper(sellerController.getReviews))
+
 module.exports=router

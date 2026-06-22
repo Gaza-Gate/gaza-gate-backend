@@ -417,7 +417,7 @@ const getOrder=async(userId,orderId)=>{
     ],
   })
 
-  if(!order)throw new AppError().fail("Order not found",404)
+  if(!order) throw new AppError().fail("Order not found",404)
   const createdAt  = new Date(order.createdAt);
   const orderDate  = createdAt.toISOString().split('T')[0];          
   const orderTime  = createdAt.toTimeString().slice(0, 5);          
@@ -481,7 +481,73 @@ const updateOrder=async(userId,orderId,status)=>{
    
 }
 
+const getReviews= async(userId,query)=>{
+  const seller=await Seller.findOne({where:{userId:userId},attributes:['id','rating','ratingCount']})
+  if (!seller) throw new AppError().fail1("Seller not found",404);
+
+  const {rating}=query ?? {}
+
+  const where={sellerId:seller.id}
+
+  if(rating){
+    where.rating=+rating
+  }
+
+
+  const reviews=await Review.findAll({where:where,attributes:['rating','comment','createdAt'],include:[{
+    model:Customer,
+    as:'customer',
+    attributes:['id'],
+    include:[{
+      model:User,
+      as:'user',
+      attributes:['firstName','lastName','avatar']
+    }]
+
+  },
+  {
+    model:Product,
+    as:'product',
+    attributes:['name']
+  }],
+order:[['createdAt', 'DESC']]
+})
+
+
+const distributionRating = await Review.findAll({
+    where: { sellerId: seller.id },
+    attributes: [
+      'rating',
+      [sequelize.fn('COUNT', sequelize.col('rating')), 'count']
+    ],
+    group: ['rating'],
+    raw: true
+  });
+
+  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  
+  distributionRating.forEach(item => {
+    distribution[item.rating] = parseInt(item.count);
+  });
+
+ const formattedReviews = reviews.map((r) => ({
+    customerName: `${r.customer.user.firstName} ${r.customer.user.lastName}`,
+    avatar:       r.customer.user.avatar,
+    rating:       r.rating,
+    productName:  r.product.name,
+    comment:      r.comment,
+    date:         r.createdAt.toISOString().split('T')[0],
+  }));
+
+  return{
+      averageRating: seller.rating ,   
+      totalReviews:seller.ratingCount,                              
+      distribution,          
+      reviews: formattedReviews,  
+  }
+
+}
 
 
 
-module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getAllOrders, getOrder, updateOrder}
+module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getAllOrders, getOrder, updateOrder,getReviews}

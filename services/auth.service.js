@@ -1,5 +1,8 @@
 const { sequelize } = require("../config/db.config.js");
-const { Sequelize } = require('sequelize');
+const { 
+  Sequelize,
+  UniqueConstraintError
+} = require('sequelize');
 
 const {
   getEmailVerificationByUserIdAndCode,
@@ -39,33 +42,36 @@ const localRegister = async (data, roleName, createProfile) => {
   const { firstName, lastName, email, password } = data;
 
   const result = await sequelize.transaction(async (transaction) => {
-    const existingUser = await User.findOne({ where: { email }, transaction });
-    if (existingUser) {
-      throw AppError.fail(
-        "This email is already registered. Please login.",
-        409,
-      );
-    }
-
     const role = await Role.findOne({ where: { name: roleName }, transaction });
     if (!role) {
       throw AppError.error(`${roleName} role not found`, 500);
     }
 
     const hashedPassword = await hashPassword(password, 12);
-    const user = await User.create(
-      {
-        firstName,
-        lastName,
-        email,
-        password: hashedPassword,
-        roleId: role.id,
-        isVerified: false,
-        status: "active",
-      },
-      { transaction },
-    );
-
+    
+    let user;
+    try {
+      user = await User.create(
+        {
+          firstName,
+          lastName,
+          email,
+          password: hashedPassword,
+          roleId: role.id,
+          isVerified: false,
+          status: "active",
+        },
+        { transaction },
+      );
+    } catch (err) {
+      if (err instanceof UniqueConstraintError) {
+        throw AppError.fail("This email is already registered. Please login.",
+            409,
+        );
+      }
+      throw err;
+    }
+    
     await createProfile(user.id, transaction);
 
     const { code: otpCode } = await createVerificationCode(

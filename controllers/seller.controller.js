@@ -125,4 +125,12 @@ const updateOrder=async(req,res)=> {
     )
 }
 
-module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getproducts,getProduct,createProduct,updateProduct,deleteProduct,getOrders,getOrder,updateOrder}
+const getReviews=async(req,res)=>{
+    const reviews=await sellerService.getReviews(req.user.id,req.query)
+    return apiResponse.sendSuccess(res,
+        reviews,
+        200
+    )
+}
+
+module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getproducts,getProduct,createProduct,updateProduct,deleteProduct,getOrders,getOrder,updateOrder,getReviews}

@@ -11,7 +11,7 @@ const sellerRoute=require("./routes/seller.route.js")
 const app = express();
 
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: "https://gaza-gate-frontend.vercel.app",
   credentials: true
 }));
 
