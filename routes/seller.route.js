@@ -10,13 +10,13 @@ const upload=require("../middlewares/common/upload.js")
 const router=express.Router()
 
 
-
-router.get("/dashboard",isauthenticated,asyncWrapper(sellerController.dashboard))
+// view seller dashboard
+router.get("/dashboard",isauthenticated,asyncWrapper(sellerController.getDashboard))
 
 // View own store and account information
 router.get("/viewProfile",isauthenticated,asyncWrapper(sellerController.getSellerProfile))
 
-//Update store and account information
+//Update seller store and account information
 router.put("/updateProfile",isauthenticated,filterBody([
     "firstName",
     "lastName",
@@ -25,33 +25,45 @@ router.put("/updateProfile",isauthenticated,filterBody([
     "storeName",
     "storeDescription",
     "neighborhood",
+    "street",
+    "notes"
   ]),sellerValidator.updateProfileValidation,requestsValidator,asyncWrapper(sellerController.updateSellerProfile))
 
-  router.put("/updatePassword",isauthenticated,filterBody(['currentPassword','newPassword','confirmPassword'],sellerValidator.updatePasswordValidation,asyncWrapper(sellerController.updatePassword)))
+  router.put("/updatePassword",
+    isauthenticated,
+    filterBody(['currentPassword','newPassword','confirmPassword']),
+    sellerValidator.updatePasswordValidation,requestsValidator,
+    asyncWrapper(sellerController.updatePassword))
 
 
 // List of seller products
-router.get("/Products",isauthenticated,asyncWrapper(sellerController.getproducts))
+router.get("/products",isauthenticated,asyncWrapper(sellerController.getproducts))
 
 // Add product in seller store
 router.post("/products",
-  filterBody(["name","price","category","stockType","quantity","status","image"])
-,isauthenticated,
-authorize('seller'),
-upload.single('image')
-,sellerValidator.createProductValidation
+isauthenticated,
+upload.single('image'),
+filterBody(["name","price","category","stockType","quantity","status","image"]),
+sellerValidator.createProductValidation
 ,requestsValidator
 ,asyncWrapper(sellerController.createProduct))
 
 //Get details of a single product.
-router.get("/products/:productId",sellerController.getProduct)
+router.get("/products/:productId", isauthenticated, asyncWrapper(sellerController.getProduct))
 
 /*Edit an existing product
 ( name, price, categoryId, stockType, quantity, image , status)*/
-//router.put("/products/:productId")
+router.put("/products/:productId",
+  isauthenticated,
+  upload.single('image'),   // string, not variable
+  filterBody(["name","price","category","stockType","quantity","status"]),
+  sellerValidator.updateProductValidation,
+  requestsValidator,
+  asyncWrapper(sellerController.updateProduct)
+)
 
 // Permanently delete a product in seller store.
-//router.delete("/products/:productId")
+router.delete("/products/:productId",isauthenticated,asyncWrapper(sellerController.deleteProduct))
 
 //List all orders for  seller's products
 router.get("/orders",isauthenticated,asyncWrapper(sellerController.getOrders))
@@ -59,7 +71,7 @@ router.get("/orders",isauthenticated,asyncWrapper(sellerController.getOrders))
 // Get  details of a specific order
 router.get("/orders/:orderId",isauthenticated,asyncWrapper(sellerController.getOrder))
 
-// update the seller's order status using the approved workflow
-router.put("/orders/:orderId",isauthenticated,filterBody(['status'],sellerValidator.updateOrderStatus,asyncWrapper(sellerController.updateOrder)))
+// update the seller's order status 
+router.put("/orders/:orderId",isauthenticated,filterBody(['status']),sellerValidator.updateOrderStatus,requestsValidator,asyncWrapper(sellerController.updateOrder))
 
 module.exports=router

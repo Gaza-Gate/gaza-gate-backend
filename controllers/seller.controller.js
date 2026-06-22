@@ -6,6 +6,11 @@ const productService=require("../services/product.service.js")
 
 const getDashboard=async(req,res)=>{
     const dashboard=await sellerService.getDashboard(req.user.id)
+
+    return apiResponse.sendSuccess(res,
+        dashboard,
+        200
+    )
 }
 
 const getSellerProfile=async(req,res)=>{
@@ -22,7 +27,7 @@ const getSellerProfile=async(req,res)=>{
 const updateSellerProfile=async(req,res)=>{
    await sellerService.updateSellerProfile(req.user.id,req.body,req.file)
 
-   return apiResponse.sendSuccess(res,{message:"profile update successfully"},201)
+   return apiResponse.sendSuccess(res,{message:"profile update successfully"},200)
 }
 
 const updatePassword=async(req,res)=>{
@@ -36,11 +41,9 @@ const updatePassword=async(req,res)=>{
 }
 
 const getproducts=async(req,res)=>{
-    const products=await productService.getAllProducts(req.user.id)
+    const products=await productService.getAllProducts(req.user.id,req.query)
     
-    if(!products){
-        return new AppError().fail("No product for this seller",404)
-    }
+    
 
     return apiResponse.sendSuccess(
         res,
@@ -53,11 +56,7 @@ const getproducts=async(req,res)=>{
 
 
 const getProduct=async(req,res)=>{
-    const product=await productService.getProduct(req.params.id)
-
-    if(!product){
-        return new AppError().fail("Product not found",404)
-    }
+    const product=await productService.getProduct(req.params.productId)
 
     return apiResponse.sendSuccess(
         res,
@@ -78,6 +77,24 @@ const createProduct=async(req,res)=>{
     )
 }
 
+const updateProduct=async(req,res)=>{
+    const product =await productService.updateProduct(req.params.productId, req.user.id, req.body, req.file)
+    
+    return apiResponse.sendSuccess(res,
+        product,
+        200
+    )
+}
+
+const deleteProduct=async(req,res)=>{
+    await productService.deleteProduct(req.params.productId,req.user.id)
+
+    return apiResponse.sendSuccess(res,
+        {message:"product deleted successfully"},
+        200
+    )
+}
+
 const getOrders=async(req,res)=>{
     const orders=await sellerService.getAllOrders(req.user.id)
 
@@ -89,7 +106,7 @@ const getOrders=async(req,res)=>{
 }
 
 const getOrder=async(req,res)=>{
-    const order=await sellerService.getOrder(req.user.id,req.params.id)
+    const order=await sellerService.getOrder(req.user.id,req.params.orderId)
 
     return apiResponse.sendSuccess(
         res,
@@ -99,7 +116,7 @@ const getOrder=async(req,res)=>{
 }
 
 const updateOrder=async(req,res)=> {
-    const order=await sellerService.updateOrder(req.user.id,req.params.id)
+    const order=await sellerService.updateOrder(req.user.id,req.params.orderId,req.body.status)
 
     return apiResponse.sendSuccess(
         res,
@@ -108,4 +125,4 @@ const updateOrder=async(req,res)=> {
     )
 }
 
-module.exports={getSellerProfile,updateSellerProfile,updatePassword,getproducts,getProduct,createProduct,getOrders,getOrder,updateOrder}
+module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getproducts,getProduct,createProduct,updateProduct,deleteProduct,getOrders,getOrder,updateOrder}

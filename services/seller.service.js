@@ -2,26 +2,105 @@ const { sequelize } = require("../config/db.config.js");
 const { Sequelize, where } = require('sequelize');
 const Seller = require("../models/seller.model.js");
 const User = require("../models/user.model.js");
+const UserStatus=require("../constants/userStatus.constant.js")
 const Address=require('../models/address.model.js');
 const Product=require("../models/product.model.js");
 const AppError = require("../utils/AppError.util.js");
 const Category=require("../models/category.model.js")
+const Customer=require("../models/customer.model.js")
 const Order=require("../models/order.model.js")
 const OrderItem=require("../models/orderItem.model.js")
+const ORDER_STATUSES=require("../constants/orderStatuses.constant.js")
+const Review=require("../models/review.model.js")
 const passwordService=require("../utils/password.util.js");
-const {deleteImage}=require("./image.service.js")
+const {deleteImage}=require("./image.service.js");
+const Conversation = require("../models/conversation.model.js");
+const Message=require("../models/message.model.js")
+const TRANSITIONS=require("../constants/transitionsStatus.constant.js")
 
 
 const getDashboard=async(userId)=>{
-  const seller=await Seller.findOne({where:{userId:userId}})
+  const seller=await Seller.findOne({where:{userId:userId},attributes:['id','rating','ratingCount']})
   if(!seller)throw new AppError().fail("Seller not found",404);
-  const completedOrder= await Order.count({ where: { sellerId: seller.id ,status:'completed'} })
-  const waitingOrder= await Order.count({ where: { sellerId: seller.id, status: 'waiting' } })
-  const inProgressOrder=await Order.count({ where: { sellerId: seller.id, status: 'in_progress' } })
-  const activeProduct=await Product.count({where: { sellerId: seller.id, status: 'active' }})
   
-  const recentOrders = await Order.findAll({
-    where: { sellerId },
+   const [completedOrder, waitingOrder, inProgressOrder, activeProduct] = await Promise.all([
+    Order.count({ where: { sellerId: seller.id, status: ORDER_STATUSES.COMPLETED } }),
+    Order.count({ where: { sellerId: seller.id, status: ORDER_STATUSES.PENDING_REVIEW } }),
+    Order.count({ where: { sellerId: seller.id, status: ORDER_STATUSES.IN_PRODUCTION } }),
+    Product.count({ where: { sellerId: seller.id, status: UserStatus.ACTIVE } }),
+  ]);
+   const reviews=await Review.findAll({where:{sellerId:seller.id},
+    attributes:['rating','comment','createdAt'],
+    include:[{
+      model:Customer,
+      as:'customer',
+      attributes: ['id'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['firstName', 'lastName', 'avatar'],
+          },
+        ],
+      },
+    ],
+    order: [['createdAt', 'DESC']],
+    limit: 3,            
+  });
+
+ const [fiveRating, fourRating, threeRating, twoRating, oneRating] = await Promise.all([
+    Review.count({ where: { sellerId: seller.id, rating: 5 } }),
+    Review.count({ where: { sellerId: seller.id, rating: 4 } }),
+    Review.count({ where: { sellerId: seller.id, rating: 3 } }),
+    Review.count({ where: { sellerId: seller.id, rating: 2 } }),
+    Review.count({ where: { sellerId: seller.id, rating: 1 } }),
+  ]);
+
+
+  const formattedReviews = reviews.map((r) => ({
+    customerName: `${r.customer.user.firstName} ${r.customer.user.lastName}`,
+    avatar:       r.customer.user.avatar,
+    rating:       r.rating,
+    comment:      r.comment,
+    date:         r.createdAt.toISOString().split('T')[0],
+  }));
+
+  const conversations = await Conversation.findAll({
+  where: { sellerId: seller.id },
+  attributes: ['id', 'lastMessageAt'],
+  include: [
+    {
+      model: User,
+      as: 'customer',
+      attributes: ['id', 'firstName', 'lastName', 'avatar'],
+    },
+  ],
+  order: [['lastMessageAt', 'DESC']],
+  limit: 3,
+});
+
+
+const conversationsWithLastMessage = await Promise.all(
+  conversations.map(async (c) => {
+    const lastMessage = await Message.findOne({
+      where: { conversationId: c.id },
+      attributes: ['id', 'content', 'senderId', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+    });
+     return {
+      conversationId: c.id,
+      customerName:   `${c.customer.user.firstName} ${c.customer.user.lastName}`,
+      avatar:         c.customer.avatar,
+      preview:        lastMessage?.content ?? '',
+      isFromCustomer: lastMessage ? lastMessage.senderId === c.customer.id : false,
+      time:          c.lastMessageAt,
+    };
+  })
+);
+    
+  
+   const recentOrders = await Order.findAll({
+    where: { sellerId:seller.id },
     attributes: ['id', 'orderNumber', 'status', 'totalPrice', 'createdAt'],
     include: [
       {
@@ -41,17 +120,39 @@ const getDashboard=async(userId)=>{
     limit: 3,              
   });
 
+  const formattedRecentOrders = recentOrders.map((order) => {
+
+ 
+    return {
+      id:           order.id,
+      orderNumber:  order.orderNumber,                              
+      customerName: `${order.customer.user.firstName} ${order.customer.user.lastName}`,
+      status:       order.status,                                  
+      total:order.totalPrice,                                                      
+    };
+  });
+
   return {
-    // Stats cards
     stats: {
       completedOrder,      
       activeProduct,   
       inProgressOrder,    
       waitingOrder,      
     },
+     rating: {
+      average:     seller.rating ,   
+      totalReviews:seller.ratingCount,                              
+      distribution: {fiveRating,fourRating,threeRating,twoRating,oneRating},          
+      reviews:      formattedReviews,           
+    },
+
+    messages: {
+      list:conversationsWithLastMessage ,         
+    },
+
 
  
-    recentOrders: recentOrders,         
+    recentOrders:formattedRecentOrders,         
   };
 
 
@@ -79,7 +180,7 @@ const getSellerProfile= async(userId)=>{
     const address=await Address.findOne({where:{userId:userId},attributes:['neighborhood','street','notes']})
    
     const totalOrders = await Order.count({     
-    where: { sellerId: seller.id }
+    where: { sellerId: seller.id,status: 'completed'  }
    });
 
     const memberSince = new Date(seller.createdAt);
@@ -107,8 +208,8 @@ const getSellerProfile= async(userId)=>{
     firstName:         seller.user.firstName,
     lastName:          seller.user.lastName,
     email:             seller.user.email,
-    phone:             seller.user.phone,
-    avatar:            seller.user.avatar,
+    phone:             seller.user?.phone,
+    avatar:            seller.user?.avatar,
     address: address
       ? `${address.neighborhood} ${address.street}`  
       : null,
@@ -137,14 +238,13 @@ for (const key in data) {
   if(addressFields.includes(key)) addressData[key]=data[key]
 }
 
- if (file) {
-    const seller = await Seller.findOne({ where: { userId }, include:[
-    {
-      model: User, 
-      as:"user",
-      attributes: ['avatar'] 
-    }], });
-    if (seller.user?.avatar) deleteImage(seller.user.avatar); // 🗑 delete old image
+ let oldAvatar = null;
+  if (file) {
+    const existingUser = await User.findOne({
+      where: { id: userId },
+      attributes: ['avatar'],
+    });
+    oldAvatar = existingUser?.avatar ?? null;
     userData.avatar = file.filename;
   }
 
@@ -172,6 +272,8 @@ try {
   }
 
   await transaction.commit();
+
+  if (file && oldAvatar) deleteImage(oldAvatar);
 } catch (error) {
  
   await transaction.rollback();
@@ -209,19 +311,20 @@ const getAllOrders=async(userId)=>{
     where:{userId:userId}
   })
 
-  if (!seller) return new AppError().fail('Seller not found', 404); 
+  if (!seller) throw new AppError().fail('Seller not found', 404); 
 
-  const totalOrder= await Order.count({ where: { sellerId: seller.id } })
-  const waitingOrder= await Order.count({ where: { sellerId: seller.id, status: 'waiting' } })
-  const approvedOrder=await  Order.count({ where: { sellerId: seller.id, status: 'approved' } })
-  const inProgressOrder=await  Order.count({ where: { sellerId: seller.id, status: 'in_progress' } })
+  const [totalOrder, waitingOrder,approvedOrder, inProgressOrder] = await Promise.all([
+    Order.count({ where: { sellerId: seller.id} }),
+    Order.count({ where: { sellerId: seller.id, status: ORDER_STATUSES.PENDING_REVIEW } }),
+    Order.count({ where: { sellerId: seller.id, status: ORDER_STATUSES.ACCEPTED } }),
+    Order.count({ where: { sellerId: seller.id, status: ORDER_STATUSES.IN_PRODUCTION } }),
+  ]);
 
 
   const orders=await Order.findAll({where:{sellerId:seller.id}, attributes: [
       'id',
       'orderNumber',       
-      'status',
-      'deliveryFee',            
+      'status',       
       'totalPrice',      
       'createdAt',         
     ],
@@ -241,14 +344,7 @@ const getAllOrders=async(userId)=>{
       {
         model: OrderItem,
         as: 'items',
-        attributes: ['quantity', 'unitPrice'],       
-        include: [
-          {
-            model: Product,
-            as: 'product',
-            attributes: ['name'],
-          },
-        ],
+        attributes: ['quantity'],       
       },
     ],
     order: [['createdAt', 'DESC']],
@@ -256,22 +352,17 @@ const getAllOrders=async(userId)=>{
     })
 
   if(!orders.length){
-    return new AppError().fail("No orders Found",404)
+    throw new AppError().fail("No orders Found",404)
   }
 
   const formattedOrders = orders.map((order) => {
-    const subtotal = order.items.reduce(
-      (sum, item) => sum + item.unitPrice * item.quantity, 0
-    );
-    const total = subtotal + (order.delivery ?? 0);
-
     return {
       id:           order.id,
       orderNumber:  order.orderNumber,                              
       customerName: `${order.customer.user.firstName} ${order.customer.user.lastName}`,
       date:         order.createdAt.toISOString().split('T')[0],   
       itemsCount:   order.items.length,                             
-      totalPrice:total,                                                         
+      totalPrice:order.totalPrice,                                                         
       status:       order.status,                                    
     };
   });
@@ -291,14 +382,18 @@ const getAllOrders=async(userId)=>{
 
 const getOrder=async(userId,orderId)=>{
   const seller = await Seller.findOne({ where: { userId:userId } });
-  if (!seller) return new AppError().fail('Seller not found', 404);
+  if (!seller) throw new AppError().fail('Seller not found', 404);
   const order=await Order.findOne({
     where:{id:orderId,sellerId:seller.id},
     attributes: [
       'id',
       'orderNumber',      
-      'status',           
-      'deliveryFee',     
+      'status',
+      'totalPrice',
+      'subtotal',
+      'shippingNeighborhood',
+      'shippingStreet',           
+      'shippingFee',     
       'createdAt',         
     ],
     include: [
@@ -310,41 +405,19 @@ const getOrder=async(userId,orderId)=>{
           {
             model: User,
             as: 'user',
-            attributes: ['firstName', 'lastName', 'phone'], 
-          },
-          {
-            model: Address,
-            as: 'address',
-            attributes: ['neighborhood', 'street'],       
+            attributes: ['id','firstName', 'lastName', 'phone'], 
           },
         ],
-      },
-
-      
+      }, 
       {
         model: OrderItem,
         as: 'items',
-        attributes: ['id', 'quantity', 'unitPrice'],        
-        include: [
-          {
-            model: Product,
-            as: 'product',
-            attributes: ['id', 'name', 'image'],        
-          },
-        ],
+        attributes: ['id', 'quantity', 'unitPrice','lineTotal','productName','productImage'],        
       },
     ],
   })
 
-  if(!order){
-    return new AppError().fail("Order not found",404)
-  }
-
-  const subtotal = order.items.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity, 0
-  );
-  const total = subtotal + (order.deliveryFee ?? 0);
-
+  if(!order)throw new AppError().fail("Order not found",404)
   const createdAt  = new Date(order.createdAt);
   const orderDate  = createdAt.toISOString().split('T')[0];          
   const orderTime  = createdAt.toTimeString().slice(0, 5);          
@@ -360,21 +433,21 @@ const getOrder=async(userId,orderId)=>{
     customer: {
       name:    `${order.customer.user.firstName} ${order.customer.user.lastName}`,
       phone:   order.customer.user.phone,
-      address: `${order.customer.address?.neighborhood} ${order.customer.address?.street}`,
+      address: `${order.shippingNeighborhood ?? ''} ${order.shippingStreet ?? ''}`,
     },
 
     items: order.items.map((item) => ({
       id:       item.id,
-      name:     item.product.name,
-      image:    item.product.image,
+      name:     item.productName,
+      image:    item.productImage,
       quantity: item.quantity,
-      price:    item.unitprice,
-      total:    item.unitprice * item.quantity,
+      price:    item.unitPrice,
+      total:   item.lineTotal,
     })),
 
-    subtotal:    subtotal,                                            
-    deliveryFee: order.deliveryFee ?? 0,                             
-    total:       total,                 
+    subtotal:order.subtotal,                                            
+    shippingFee: order.shippingFee ,                             
+    total:order.totalPrice,                 
 }
 }
 const updateOrder=async(userId,orderId,status)=>{
@@ -385,9 +458,26 @@ const updateOrder=async(userId,orderId,status)=>{
   });
   if (!order) throw new AppError().fail('Order not found', 404);
 
-  await Order.update({status},{where:{id:orderId,sellerId:seller.id}})
+  const allowedNextStatuses = TRANSITIONS[order.status] ?? [];
+ 
+  if (allowedNextStatuses.length === 0) {
+    throw AppError.fail(
+      `Order is already in a final state ("${order.status}") and cannot be updated further`,
+      400
+    );
+  }
+ 
+  if (!allowedNextStatuses.includes(status)) {
+    throw AppError.fail(
+      `Invalid transition: "${order.status}"`,
+      400
+    );
+  }
 
-  return await Order.findOne({ where: { id: orderId } });      
+ order.status=status
+ await order.save()
+
+  return order;      
    
 }
 

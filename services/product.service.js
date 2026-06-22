@@ -8,7 +8,10 @@ const {deleteImage,getImageUrl}=require("./image.service.js")
 
 const getAllProducts=async(userId,query)=>{
   const seller=await Seller.findOne({where:{userId:userId}})
-  const{search}=query
+
+  if(!seller) throw new AppError().fail("Seller not found")   
+
+  const { search } = query ?? {}
 
   const where = { sellerId: seller.id };
  
@@ -66,7 +69,9 @@ const getProduct=async(productId)=>{
    attributes:['id','name','description','price', 'stockType','quantity','image','status']
   })
 
-  return{ ...product,
+  if (!product) throw AppError.fail('Product not found', 404);
+
+  return{ ...product.toJSON(),
     image:getImageUrl(product.image)
 };
 }
@@ -75,6 +80,10 @@ const createProduct=async(userId,data,file)=>{
   const seller=await Seller.findOne({where:{userId:userId}})
   
   if (!seller) throw new AppError().fail('Seller not found',404);
+
+  const category=await Category.findOne({where:{name:categoryName}})
+
+  if (!category) throw new AppError().fail("Category not found");
 
  const product = await Product.create({
     name:       data.name,
@@ -90,10 +99,46 @@ const createProduct=async(userId,data,file)=>{
 
 }
 
-const updateProduct = async (productId, userId, data, file) => {}
+const updateProduct = async (productId, userId, data, file) => {
+  const seller=await Seller.findOne({where:{userId:userId}})
+  if (!seller) throw new AppError().fail("Seller not found",404);
+  
+  const product=await Product.findOne({where:{id:productId,sellerId:seller.id}})
+  if(!product) throw new AppError().fail("Product not found",404);
+  
+  let categoryId = product.categoryId;
+  if (data.categoryName) {
+    const category = await Category.findOne({ where: { name: data.categoryName } });
+    if (!category) throw AppError.fail('Category not found', 400);
+    
+    categoryId = category.id;
+  }
+  const stockType = data.stockType ?? product.stockType;
+  const quantity  = stockType === 'limited'
+    ? (data.quantity !== undefined ? data.quantity : product.quantity)
+    : null;  
+    
+  const oldImage = product.image;
+ 
+  product.name        = data.name ?? product.name;
+  product.price        = data.price ?? product.price;
+  product.categoryId   = categoryId;
+  product.stockType    = stockType;
+  product.quantity     = quantity;
+  product.status       = data.status      ?? product.status;
+  if (file) product.image = file.filename;
+ 
+  await product.save();
+ 
+  if (file && oldImage) deleteImage(oldImage);
+ 
+  return {
+    ...product.toJSON(),
+  };
+}
 
 const deleteProduct = async (productId, userId) => {
-  const seller = await Seller.findOne({ where: { userId } });
+  const seller = await Seller.findOne({ where: { userId:userId } });
   if (!seller) throw AppError.fail('Seller not found', 404);
  
   const product = await Product.findOne({
@@ -103,9 +148,10 @@ const deleteProduct = async (productId, userId) => {
  
   const imageToDelete = product.image;
   await product.destroy();
-  deleteImage(imageToDelete);        
+  deleteImage(imageToDelete); 
+  
 };
 
 
 
-module.exports={getAllProducts,getProduct,createProduct}
+module.exports={getAllProducts,getProduct,createProduct,updateProduct,deleteProduct}

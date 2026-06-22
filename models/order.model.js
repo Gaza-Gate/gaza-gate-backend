@@ -86,7 +86,6 @@ const Order = sequelize.define(
       allowNull: true,
       field: "expected_delivery_at",
     },
-
     reviewedAt: {
       type: DataTypes.DATE,
       allowNull: true,
@@ -102,12 +101,26 @@ const Order = sequelize.define(
       allowNull: true,
       field: "rejected_at",
     },
+    inProductionAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "in_production_at",
+    },
+    readyAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "ready_at",
+    },
     completedAt: {
       type: DataTypes.DATE,
       allowNull: true,
       field: "completed_at",
     },
-
+    cancelledAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "cancelled_at",
+    },
     subtotal: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
@@ -157,7 +170,6 @@ const Order = sequelize.define(
         const discountAmount = Number(this.discountAmount);
         const shippingFee = Number(this.shippingFee);
         const totalPrice = Number(this.totalPrice);
-
         if (subtotal < 0) throw new Error("subtotal cannot be negative");
         if (discountAmount < 0)
           throw new Error("discountAmount cannot be negative");

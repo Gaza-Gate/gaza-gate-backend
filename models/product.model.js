@@ -51,15 +51,29 @@ const Product = sequelize.define(
         min: 0,
       },
     },
-    image: {
-      type: DataTypes.STRING(255),
-      allowNull: true,
-      defaultValue: "uploads/default-product.png",
-    },
     status: {
       type: DataTypes.ENUM("active", "hidden"),
       allowNull: false,
       defaultValue: "active",
+    },
+    averageRating: {
+      type: DataTypes.DECIMAL(3,2),
+      allowNull: false,
+      defaultValue: 0,
+      field: "average_rating",
+      validate: {
+        min: 0,
+        max: 5,
+      },
+    },
+    reviewsCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      field: "reviews_count",
+      validate: {
+        min: 0,
+      },
     },
     isDeleted: {
       type: DataTypes.BOOLEAN,

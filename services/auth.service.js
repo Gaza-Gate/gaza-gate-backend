@@ -215,13 +215,13 @@ const verifyEmail = async ({ email, code }) => {
 };
 
 const localLogin = async ({ email, password }, roleName) => {
-  const user = await User.findOne({
+  const user = await User.unscoped().findOne({
     where: { email },
-    attributes: { include: ["password"] },
     include: [{ model: Role, as: "role" }],
   });
 
   const roleLabel = roleName === userRoles.SELLER ? "seller" : "customer";
+  
   if (!user) {
     throw AppError.fail(`No ${roleLabel} account found with this email.`, 404);
   }
@@ -235,6 +235,18 @@ const localLogin = async ({ email, password }, roleName) => {
     throw AppError.fail(`No ${roleLabel} account found with this email.`, 404);
   }
   
+  if (!user.password) {
+    const authProvider = await UserAuthProvider.findOne({
+      where: { userId: user.id },
+    });
+    if (authProvider) {
+      throw AppError.fail(
+        `This account uses ${authProvider.provider} login. Please sign in with ${authProvider.provider}.`,
+        400,
+      );
+    }
+  }
+
   const isPasswordValid = await comparePassword(password, user.password);
   if (!isPasswordValid) {
     throw AppError.fail("Invalid email or password.", 401);
@@ -246,7 +258,7 @@ const localLogin = async ({ email, password }, roleName) => {
   if (user.status !== "active") {
     throw AppError.fail("Your account has been suspended. Please contact support.", 403);
   }
-  
+
   return await sequelize.transaction(async (transaction) => {
     const accessToken = token.signAccessToken({
       userId: user.id,
@@ -276,6 +288,8 @@ const localLogin = async ({ email, password }, roleName) => {
     return { user: safeUser, accessToken, refreshToken };
   });
 };
+
+
 
 const resendVerificationCode = async ({ email }) => {
   const result = await sequelize.transaction(async (transaction) => {
@@ -652,8 +666,13 @@ const customerGoogleRegister = async (payload) => {
       transaction,
     );
     
-    const safeUser = user.toJSON();
-    delete safeUser.password;
+    const safeUser = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: customerRole.name
+    };
     return {
       user: safeUser,
       accessToken,
@@ -671,14 +690,14 @@ const customerGoogleLogin = async (payload) => {
         provider: "google",
         providerId: payload.sub,
       },
-      include: [{ model: User }],
+      include: [{ model: User, as: "user" }],
       transaction,
     });
     if (!authProvider) {
       throw AppError.fail("No account found. Please register first.", 404);
     }
 
-    const user = authProvider.User;
+    const user = authProvider.user;
 
     const role = await Role.findByPk(user.roleId, { transaction });
     if (!role) {
@@ -716,8 +735,13 @@ const customerGoogleLogin = async (payload) => {
       transaction,
     );
 
-    const safeUser = user.toJSON();
-    delete safeUser.password;
+    const safeUser = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: role.name
+    };
     return { 
       user: safeUser,
       accessToken,
@@ -851,8 +875,13 @@ const sellerGoogleRegisterComplete = async (data) => {
       transaction,
     );
     
-    const safeUser = user.toJSON();
-    delete safeUser.password;
+    const safeUser = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: sellerRole.name
+    };
     return { 
       user: safeUser, 
       accessToken,
@@ -870,14 +899,14 @@ const sellerGoogleLogin = async (payload) => {
         provider: "google",
         providerId: payload.sub,
       },
-      include: [{ model: User }],
+      include: [{ model: User, as: "user" }],
       transaction,
     });
     if (!authProvider) {
       throw AppError.fail("No account found. Please register first.", 404);
     }
 
-    const user = authProvider.User;
+    const user = authProvider.user;
 
     const role = await Role.findByPk(user.roleId, { transaction });
     if (!role) {
@@ -915,9 +944,13 @@ const sellerGoogleLogin = async (payload) => {
       transaction,
     );
 
-    const safeUser = user.toJSON();
-    delete safeUser.password;
-
+    const safeUser = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: role.name
+    };
     return { user: safeUser, accessToken, refreshToken };
   });
 };
@@ -936,11 +969,13 @@ const saveRefreshToken = async (userId, refreshToken, transaction = null) => {
 };
 
 const refreshAccessToken = async (oldRefreshToken) => {
-  if (!oldRefreshToken) {
-    throw AppError.fail("Refresh token is required", 400);
+  let payload;
+  try {
+    payload = token.verifyRefreshToken(oldRefreshToken);
+  } catch (error) {
+    throw AppError.fail("Invalid or expired refresh token", 401);
   }
 
-  const payload = token.verifyRefreshToken(oldRefreshToken);
   if (!payload?.userId) {
     throw AppError.fail("Invalid refresh token payload", 401);
   }
@@ -949,63 +984,59 @@ const refreshAccessToken = async (oldRefreshToken) => {
 
   return await sequelize.transaction(async (t) => {
     const storedToken = await RefreshToken.findOne({
-      where: {
-        tokenHash: oldTokenHash,
-        userId: payload.userId,
-      },
+      where: { tokenHash: oldTokenHash, userId: payload.userId },
       transaction: t,
-      lock: Sequelize.Transaction.LOCK.UPDATE
+      lock: Sequelize.Transaction.LOCK.UPDATE,
     });
 
-    if (!storedToken) {
-      throw AppError.fail("Invalid refresh token", 401);
-    }
-    if (storedToken.expiresAt < new Date()) {
-      throw AppError.fail("Refresh token expired", 401);
-    }
-    if (storedToken.revokedAt) {
-      throw AppError.fail("Refresh token revoked", 400);
-    }
+    if (!storedToken) throw AppError.fail("Invalid refresh token", 401);
+    if (storedToken.expiresAt < new Date()) throw AppError.fail("Refresh token expired", 401);
+    if (storedToken.revokedAt) throw AppError.fail("Refresh token revoked", 401);
 
     const user = await User.findByPk(payload.userId, { transaction: t });
-    if (!user) {
-      throw AppError.fail("User not found", 404);
+    if (!user) throw AppError.fail("User not found", 404);
+    
+    if (user.status === userStatus.BANNED) {
+      throw AppError.fail("Your account has been banned.", 403);
     }
 
     const role = await Role.findByPk(user.roleId, { transaction: t });
-    if (!role) {
-      throw AppError.fail("User role not found", 404);
-    }
-
+    if (!role) throw AppError.fail("User role not found", 404);
+    
     storedToken.revokedAt = new Date();
     await storedToken.save({ transaction: t });
 
-    const newRefreshToken = token.signRefreshToken({
-      userId: user.id,
-      role: role.name,
-    });
-    const newRefreshTokenHash = hashToken(newRefreshToken);
-
+    const newRefreshToken = token.signRefreshToken({ userId: user.id, role: role.name });
     await RefreshToken.create(
       {
         userId: user.id,
-        tokenHash: newRefreshTokenHash,
+        tokenHash: hashToken(newRefreshToken),
         expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS),
       },
       { transaction: t },
     );
 
-    const newAccessToken = token.signAccessToken({
-      userId: user.id,
-      role: role.name,
-    });
+    const newAccessToken = token.signAccessToken({ userId: user.id, role: role.name });
 
-    return {
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-    };
+    return { accessToken: newAccessToken, refreshToken: newRefreshToken };
   });
 };
+
+const logout = async (refreshToken) => {
+  if (!refreshToken) return;
+
+  const tokenHash = hashToken(refreshToken);
+  await RefreshToken.destroy({
+    where: { tokenHash },
+  });
+};
+
+const logoutAll = async (userId) => {
+  await RefreshToken.destroy({
+    where: { userId },
+  });
+};
+
 
 module.exports = {
   customerLocalRegister,
@@ -1022,8 +1053,8 @@ module.exports = {
   sellerGoogleRegisterInit,
   sellerGoogleRegisterComplete,
   sellerGoogleLogin,
-
-  //getCurrentUser,
+  
   refreshAccessToken,
-  //logout,
+  logout,
+  logoutAll
 };

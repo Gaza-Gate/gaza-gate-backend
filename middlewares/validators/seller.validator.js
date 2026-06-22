@@ -1,17 +1,15 @@
 const { body,param } = require("express-validator");
-const VALID_STATUSES = [
-  'approved',
-  'in_progress',
-  'finished_with_delivery',
-  'completed',
-];
- 
-const TRANSITIONS = {
-  waiting:                'approved',
-  approved:               'in_progress',
-  in_progress:            'finished_with_delivery',
-  finished_with_delivery: 'completed',
-};
+const orderStatus = require("../../constants/orderStatuses.constant");
+const ORDER_STATUSES={
+  PENDING_REVIEW: orderStatus.PENDING_REVIEW,
+  ACCEPTED:orderStatus.PENDING_REVIEW,
+  REJECTED:orderStatus.REJECTED,
+  IN_PRODUCTION:  orderStatus.IN_PRODUCTION,
+  READY:orderStatus.READY,
+  COMPLETED:orderStatus.COMPLETED,
+  CANCELLED:orderStatus.CANCELLED
+}
+
 
 const updateProfileValidation = [
   body('email')
@@ -207,6 +205,62 @@ const createProductValidation = [
   }),
 ];
 
+const updateProductValidation = [
+ 
+  param('productId')
+    .notEmpty()
+    .withMessage('Product ID is required')
+    .isUUID()
+    .withMessage('Product ID must be a valid UUID'),
+ 
+  body('name')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Product name cannot be empty')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Product name must be between 2 and 100 characters'),
+ 
+  body('price')
+    .optional()
+    .isFloat({ gt: 0 })
+    .withMessage('Price must be a number greater than 0')
+    .toFloat(),
+ 
+  body('categoryName')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Category cannot be empty'),
+ 
+  body('stockType')
+    .optional()
+    .isIn(['limited', 'unlimited'])
+    .withMessage('Stock type must be either "limited" or "unlimited"'),
+ 
+  body('quantity')
+    .if(body('stockType').equals('limited'))
+    .notEmpty()
+    .withMessage('Quantity is required when stock type is "limited"')
+    .isInt({ gt: 0 })
+    .withMessage('Quantity must be a whole number greater than 0')
+    .toInt(),
+ 
+  body('quantity')
+    .if(body('stockType').equals('unlimited'))
+    .custom((value) => {
+      if (value !== undefined && value !== null && value !== '') {
+        throw new Error('Quantity must not be provided when stock type is "unlimited"');
+      }
+      return true;
+    }),
+ 
+  body('status')
+    .optional()
+    .isIn(['active', 'hidden'])
+    .withMessage('Status must be either "active" or "hidden"'),
+];
+
 const updateOrderStatus=[
   param('orderId')
     .notEmpty()
@@ -218,9 +272,9 @@ const updateOrderStatus=[
   body('status')
     .notEmpty()
     .withMessage('Status is required')
-    .isIn(VALID_STATUSES)
+    .isIn(ORDER_STATUSES)
     .withMessage(
-      `Status must be one of: ${VALID_STATUSES.join(', ')}`
+      `Status must be one of: ${ORDER_STATUSES}`
     ),
 ]
 
@@ -228,5 +282,7 @@ module.exports = {
   updateProfileValidation,
   updatePasswordValidation,
   createProductValidation,
+  updateProductValidation,
+  updateOrderStatus
 
  };

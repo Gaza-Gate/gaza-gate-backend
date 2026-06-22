@@ -1,5 +1,6 @@
 const { OAuth2Client } = require("google-auth-library");
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const AppError = require("../../utils/AppError.util.js");
 
 const googleTokenVerifier = async (req, res, next) => {
   try {
