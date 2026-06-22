@@ -6,6 +6,8 @@ async function startServer() {
   try {
     await connectDB();
     
+    await sequelize.sync({ force: true });
+    console.log("تم حذف وإعادة إنشاء جميع الجداول بنجاح!");
     //await sequelize.sync();
     await seedRoles();
 
