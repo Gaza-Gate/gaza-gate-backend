@@ -294,8 +294,7 @@ const localLogin = async ({ email, password }, roleName) => {
     return { user: safeUser, accessToken, refreshToken };
   });
 };
-
-
+};
 
 const resendVerificationCode = async ({ email }) => {
   const result = await sequelize.transaction(async (transaction) => {

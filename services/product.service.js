@@ -68,9 +68,8 @@ const createProduct = async (req) => {
 
     const product = await sequelize.transaction(async (transaction) => {
       const stockType = req.body.stockType || PRODUCT_STOCK_TYPES.UNLIMITED;
-      const quantity  = stockType === PRODUCT_STOCK_TYPES.LIMITED
-        ? req.body.quantity
-        : null;
+      
+      const quantity = stockType === PRODUCT_STOCK_TYPES.LIMITED ? Number(req.body.quantity) : null;
 
       const createdProduct = await Product.create(
         {
@@ -86,7 +85,7 @@ const createProduct = async (req) => {
         { transaction }
       );
       
-      await ProductImage.create(
+      const createdImage = await ProductImage.create(
         {
           productId: createdProduct.id,
           imageUrl:  uploadedImage.url,
@@ -97,7 +96,17 @@ const createProduct = async (req) => {
         { transaction }
       );
 
-      return createdProduct;
+      return {
+        ...createdProduct.toJSON(),
+        images: [
+          {
+            id: createdImage.id,
+            imageUrl: createdImage.imageUrl,
+            isPrimary: createdImage.isPrimary,
+            position: createdImage.position,
+          },
+        ],
+      };
     });
 
     return product;
