@@ -12,8 +12,11 @@ const errorHandler = require("./middlewares/common/errorHandler.middleware.js");
 const app = express();
 
 app.use(cors({
-  origin: "https://gaza-gate-frontend.vercel.app",
-  credentials: true
+    origin: [
+        "https://gaza-gate-frontend.vercel.app", 
+        "http://localhost:3000"
+    ],
+    credentials: true
 }));
 
 app.use(express.json());
