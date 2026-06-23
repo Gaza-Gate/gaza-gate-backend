@@ -17,6 +17,7 @@ const {deleteImage}=require("./image.service.js");
 const Conversation = require("../models/conversation.model.js");
 const Message=require("../models/message.model.js")
 const TRANSITIONS=require("../constants/transitionsStatus.constant.js")
+const Notification=require("../models/notification.model.js")
 
 
 const getDashboard=async(userId)=>{
@@ -48,14 +49,21 @@ const getDashboard=async(userId)=>{
     limit: 3,            
   });
 
- const [fiveRating, fourRating, threeRating, twoRating, oneRating] = await Promise.all([
-    Review.count({ where: { sellerId: seller.id, rating: 5 } }),
-    Review.count({ where: { sellerId: seller.id, rating: 4 } }),
-    Review.count({ where: { sellerId: seller.id, rating: 3 } }),
-    Review.count({ where: { sellerId: seller.id, rating: 2 } }),
-    Review.count({ where: { sellerId: seller.id, rating: 1 } }),
-  ]);
+ const distributionRating = await Review.findAll({
+    where: { sellerId: seller.id },
+    attributes: [
+      'rating',
+      [sequelize.fn('COUNT', sequelize.col('rating')), 'count']
+    ],
+    group: ['rating'],
+    raw: true
+  });
 
+  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  
+  distributionRating.forEach(item => {
+    distribution[item.rating] = parseInt(item.count);
+  });
 
   const formattedReviews = reviews.map((r) => ({
     customerName: `${r.customer.user.firstName} ${r.customer.user.lastName}`,
@@ -142,7 +150,7 @@ const conversationsWithLastMessage = await Promise.all(
      rating: {
       average:     seller.rating ,   
       totalReviews:seller.ratingCount,                              
-      distribution: {fiveRating,fourRating,threeRating,twoRating,oneRating},          
+      distribution: distribution,          
       reviews:      formattedReviews,           
     },
 
@@ -483,14 +491,15 @@ const updateOrder=async(userId,orderId,status)=>{
 
 const getReviews= async(userId,query)=>{
   const seller=await Seller.findOne({where:{userId:userId},attributes:['id','rating','ratingCount']})
-  if (!seller) throw new AppError().fail1("Seller not found",404);
+  if (!seller) throw new AppError().fail("Seller not found",404);
 
   const {rating}=query ?? {}
 
   const where={sellerId:seller.id}
 
-  if(rating){
-    where.rating=+rating
+  const parsedRating = parseInt(rating);
+  if (!isNaN(parsedRating) && parsedRating >= 1 && parsedRating <= 5) {
+    where.rating = parsedRating;
   }
 
 
@@ -534,7 +543,7 @@ const distributionRating = await Review.findAll({
     customerName: `${r.customer.user.firstName} ${r.customer.user.lastName}`,
     avatar:       r.customer.user.avatar,
     rating:       r.rating,
-    productName:  r.product.name,
+    productName:  r.product?.name ?? null,
     comment:      r.comment,
     date:         r.createdAt.toISOString().split('T')[0],
   }));
@@ -545,6 +554,15 @@ const distributionRating = await Review.findAll({
       distribution,          
       reviews: formattedReviews,  
   }
+
+}
+
+const getNotifications=async(userId,query)=>{
+  const seller=await Seller.findOne({where:{userId:userId}});
+  
+  if (!seller) throw new AppError().fail("Seller not found",404);
+
+  const notifications=await Notification.findAll()
 
 }
 

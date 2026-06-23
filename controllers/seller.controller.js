@@ -133,4 +133,8 @@ const getReviews=async(req,res)=>{
     )
 }
 
-module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getproducts,getProduct,createProduct,updateProduct,deleteProduct,getOrders,getOrder,updateOrder,getReviews}
+const getNotifications=async(req,res)=>{
+    const notifications=await sellerService.getNotifications(req.user.id,req.query)
+}
+
+module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getproducts,getProduct,createProduct,updateProduct,deleteProduct,getOrders,getOrder,updateOrder,getReviews,getNotifications}

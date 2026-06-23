@@ -76,4 +76,6 @@ router.put("/orders/:orderId",isauthenticated,filterBody(['status']),sellerValid
 
 router.get("/reviews",isauthenticated,asyncWrapper(sellerController.getReviews))
 
+router.get("/notifications",isauthenticated,asyncWrapper(sellerController.getNotifications))
+
 module.exports=router
