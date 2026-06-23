@@ -6,20 +6,21 @@ const {
   updateProductValidator,
 } = require("../middlewares/validators/product.validator.js");
 const productController = require("../controllers/product.controller.js");
+const authenticateAccessToken = require("../middlewares/auth/verifyToken.middleware.js");
 
-router.get('/', productController.getSellerProducts);
+router.get('/', authenticateAccessToken, productController.getSellerProducts);
 
 router.post(
   "/",
-  upload(4).array("images", 4),
+  upload(1).single("image"),
   createProductValidator,
   requestsValidator,
   productController.createProduct
 );
 
-router.patch(
+router.put(
   "/:id",
-  upload(4).array("images", 4),
+  upload(1).single("image"),
   updateProductValidator,
   requestsValidator,
   productController.updateProduct
