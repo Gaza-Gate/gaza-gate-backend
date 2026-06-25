@@ -78,4 +78,6 @@ router.get("/reviews",isauthenticated,asyncWrapper(sellerController.getReviews))
 
 router.get("/notifications",isauthenticated,asyncWrapper(sellerController.getNotifications))
 
+router.get("/notificationState",isauthenticated,asyncWrapper(sellerController.getNotificationState))
+
 module.exports=router

@@ -135,6 +135,14 @@ const getReviews=async(req,res)=>{
 
 const getNotifications=async(req,res)=>{
     const notifications=await sellerService.getNotifications(req.user.id,req.query)
+
+    return apiResponse.sendSuccess(res,notifications,200)
 }
 
-module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getproducts,getProduct,createProduct,updateProduct,deleteProduct,getOrders,getOrder,updateOrder,getReviews,getNotifications}
+const getNotificationState=async(req,res)=>{
+    const notificationState= await sellerService.getNotificationStats(req.user.id)
+
+    return apiResponse.sendSuccess(res,notificationState,200)
+}
+
+module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getproducts,getProduct,createProduct,updateProduct,deleteProduct,getOrders,getOrder,updateOrder,getReviews,getNotifications,getNotificationState}

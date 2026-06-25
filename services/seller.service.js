@@ -1,5 +1,5 @@
 const { sequelize } = require("../config/db.config.js");
-const { Sequelize, where } = require('sequelize');
+const { Sequelize, where, fn, col } = require('sequelize');
 const Seller = require("../models/seller.model.js");
 const User = require("../models/user.model.js");
 const UserStatus=require("../constants/userStatus.constant.js")
@@ -18,7 +18,8 @@ const Conversation = require("../models/conversation.model.js");
 const Message=require("../models/message.model.js")
 const TRANSITIONS=require("../constants/transitionsStatus.constant.js")
 const Notification=require("../models/notification.model.js")
-
+const UserNotification=require("../models/userNotification.model.js")
+const PAGINATION=require("../constants/pagination.constant.js")
 
 const getDashboard=async(userId)=>{
   const seller=await Seller.findOne({where:{userId:userId},attributes:['id','rating','ratingCount']})
@@ -489,83 +490,6 @@ const updateOrder=async(userId,orderId,status)=>{
    
 }
 
-const getReviews= async(userId,query)=>{
-  const seller=await Seller.findOne({where:{userId:userId},attributes:['id','rating','ratingCount']})
-  if (!seller) throw new AppError().fail("Seller not found",404);
-
-  const {rating}=query ?? {}
-
-  const where={sellerId:seller.id}
-
-  const parsedRating = parseInt(rating);
-  if (!isNaN(parsedRating) && parsedRating >= 1 && parsedRating <= 5) {
-    where.rating = parsedRating;
-  }
 
 
-  const reviews=await Review.findAll({where:where,attributes:['rating','comment','createdAt'],include:[{
-    model:Customer,
-    as:'customer',
-    attributes:['id'],
-    include:[{
-      model:User,
-      as:'user',
-      attributes:['firstName','lastName','avatar']
-    }]
-
-  },
-  {
-    model:Product,
-    as:'product',
-    attributes:['name']
-  }],
-order:[['createdAt', 'DESC']]
-})
-
-
-const distributionRating = await Review.findAll({
-    where: { sellerId: seller.id },
-    attributes: [
-      'rating',
-      [sequelize.fn('COUNT', sequelize.col('rating')), 'count']
-    ],
-    group: ['rating'],
-    raw: true
-  });
-
-  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  
-  distributionRating.forEach(item => {
-    distribution[item.rating] = parseInt(item.count);
-  });
-
- const formattedReviews = reviews.map((r) => ({
-    customerName: `${r.customer.user.firstName} ${r.customer.user.lastName}`,
-    avatar:       r.customer.user.avatar,
-    rating:       r.rating,
-    productName:  r.product?.name ?? null,
-    comment:      r.comment,
-    date:         r.createdAt.toISOString().split('T')[0],
-  }));
-
-  return{
-      averageRating: seller.rating ,   
-      totalReviews:seller.ratingCount,                              
-      distribution,          
-      reviews: formattedReviews,  
-  }
-
-}
-
-const getNotifications=async(userId,query)=>{
-  const seller=await Seller.findOne({where:{userId:userId}});
-  
-  if (!seller) throw new AppError().fail("Seller not found",404);
-
-  const notifications=await Notification.findAll()
-
-}
-
-
-
-module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getAllOrders, getOrder, updateOrder,getReviews}
+module.exports={getDashboard,getSellerProfile,updateSellerProfile,updatePassword,getAllOrders, getOrder, updateOrder }
