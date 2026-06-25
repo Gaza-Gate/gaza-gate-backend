@@ -1,5 +1,7 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db.config.js");
+const PRODUCT_STOCK_TYPES = require("../constants/stockType.constants.js");
+const PRODUCT_STATUS = require("../constants/productStatus.constants.js");
 
 const Product = sequelize.define(
   "Product",
@@ -39,9 +41,12 @@ const Product = sequelize.define(
       },
     },
     stockType: {
-      type: DataTypes.ENUM("limited", "unlimited"),
+      type: DataTypes.ENUM(
+        PRODUCT_STOCK_TYPES.LIMITED,
+        PRODUCT_STOCK_TYPES.UNLIMITED
+      ),
       allowNull: false,
-      defaultValue: "unlimited",
+      defaultValue: PRODUCT_STOCK_TYPES.UNLIMITED,
       field: "stock_type",
     },
     quantity: {
@@ -52,12 +57,15 @@ const Product = sequelize.define(
       },
     },
     status: {
-      type: DataTypes.ENUM("active", "hidden"),
+      type: DataTypes.ENUM(
+        PRODUCT_STATUS.ACTIVE,
+        PRODUCT_STATUS.HIDDEN
+      ),
       allowNull: false,
-      defaultValue: "active",
+      defaultValue: PRODUCT_STATUS.ACTIVE,
     },
     averageRating: {
-      type: DataTypes.DECIMAL(3,2),
+      type: DataTypes.DECIMAL(3, 2),
       allowNull: false,
       defaultValue: 0,
       field: "average_rating",
@@ -91,12 +99,15 @@ const Product = sequelize.define(
     validate: {
       quantityValidation() {
         if (
-          this.stockType === "limited" &&
+          this.stockType === PRODUCT_STOCK_TYPES.LIMITED &&
           (this.quantity === null || this.quantity === undefined)
         ) {
           throw new Error("Quantity is required for limited stock products");
         }
-        if (this.stockType === "unlimited" && this.quantity != null) {
+        if (
+          this.stockType === PRODUCT_STOCK_TYPES.UNLIMITED &&
+          this.quantity != null
+        ) {
           throw new Error("Quantity must be null for unlimited stock products");
         }
       },
