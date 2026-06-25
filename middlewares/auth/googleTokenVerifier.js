@@ -17,6 +17,7 @@ const googleTokenVerifier = async (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error("Google verify error:", error);
     return next(AppError.fail("Invalid or expired Google token", 401));
   }
 };
