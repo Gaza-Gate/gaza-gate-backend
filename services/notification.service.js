@@ -7,8 +7,6 @@ const PAGINATION=require("../constants/pagination.constant")
 const NOTIFICATION_TYPES=require("../constants/notificationTypes.constant")
 
 
-
-
 const getNotificationStats=async(userId)=>{
  
     const rows = await Notification.findAll({
@@ -47,7 +45,6 @@ const getNotificationStats=async(userId)=>{
 
 
 const getNotifications=async(userId,query)=>{
-  const userId=getSellerIdFromRequest(req)
   if (!userId) throw AppError.fail("Seller authentication data is missing.", 401);
 
   const page   = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
@@ -59,16 +56,17 @@ const getNotifications=async(userId,query)=>{
   const notificationWhere = {};
   if (type) notificationWhere.type = type;
 
-   const { count, rows,stats } = await Promise.all([
+   // Fix: Destructure the array returned by Promise.all
+  const [{ count, rows }, stats] = await Promise.all([
     Notification.findAndCountAll({
-    include: [
+      include: [
       {
         model: User,
         as: 'recipients',
         where: { id: userId },
         attributes: [],           
         through: {
-         attributes: ['isRead', 'createdAt'],  
+          attributes: ['isRead'],  
         },
       },
       {
@@ -85,27 +83,33 @@ const getNotifications=async(userId,query)=>{
       },
     ],
     where: notificationWhere,
-    order: [['sentAt', 'DESC']],
+
+    order: [['sentAt', 'DESC']], 
     limit,
     offset,
-    distinct: true,               
-    subQuery: false,
+    distinct: true,
   }),
-
   getNotificationStats(userId)
-])
+]);
+  
 
   const totalPages = Math.ceil(count / limit);
 
-  const notifications = rows.map((n) =>{
-    const through = n.recipients?.[0]?.UserNotification;
+  const notifications =  await Promise.all(rows.map(async(n) =>{
+    const userNotifications = await UserNotification.findOne({
+    where: {
+      userId,
+      notificationId:n.id,
+    },
+    attributes: ['notificationId', 'isRead'],
+  });
     return {
     id: n.id,
     type: n.type,
     title: n.title,
     content: n.content,
     actionUrl: n.actionUrl,
-    isRead: through?.isRead ?? false,
+    isRead:userNotifications.isRead,
     sentAt: n.sentAt,
     sender: n.sender
       ? {
@@ -121,7 +125,8 @@ const getNotifications=async(userId,query)=>{
         }
       : null,
   };
-  });
+  })
+)
   return {
     notifications,
     stats,
@@ -137,16 +142,15 @@ const getNotifications=async(userId,query)=>{
   };
 
   const markAllAsRead=async(userId)=>{
-    const [updatedCount] = await UserNotification.update(
+    const [readedCount] = await UserNotification.update(
     { isRead: true },
     { where: { userId, isRead: false } }   
   );
   
-  return { updatedCount };
+  return { readedCount };
   }
 
 const markAsRead=async(userId,notificationId)=>{
-    let alreadyRead=false
     const userNotification = await UserNotification.findOne({
     where: { userId, notificationId },
   });
@@ -158,7 +162,7 @@ const markAsRead=async(userId,notificationId)=>{
   userNotification.isRead = true;
   await userNotification.save();
  
-  return { alreadyRead: false };
+  return { userNotification };
 }
 
 const deleteAllNotifications = async (userId) => {
