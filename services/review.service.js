@@ -1,3 +1,4 @@
+const { sequelize } = require("../config/db.config.js");
 const { where, fn, col } = require('sequelize');
 const Review=require("../models/review.model.js")
 const Seller = require("../models/seller.model.js");
@@ -13,7 +14,7 @@ const getSellerIdFromRequest = (req) => {
 
 const  getSellerRatingStats=async(sellerId)=>{
   const rows = await Review.findAll({
-    where: { sellerId: seller.id },
+    where: { sellerId },
     attributes: [
       'rating',
       [sequelize.fn('COUNT', sequelize.col('rating')), 'count']
@@ -27,6 +28,7 @@ const  getSellerRatingStats=async(sellerId)=>{
   rows.forEach(item => {
     distribution[item.rating] = parseInt(item.count);
   });
+
 
   return distribution
 
@@ -48,7 +50,7 @@ const getSellerReviews= async(userId,query)=>{
     where.rating = parsedRating;
   }
 
-  const {count,rows}=await Review.findAndCountAll({where:where,attributes:['rating','comment','createdAt'],
+  const {count,rows}=await Review.findAndCountAll({where:where,attributes:['rating','comment',['created_at', 'createdAt']],
     include:[{
     model:Customer,
     as:'customer',
@@ -63,15 +65,15 @@ const getSellerReviews= async(userId,query)=>{
     model:Product,
     as:'product',
     attributes:['name']}],
-    order:[['createdAt', 'DESC']],
+    order:[['created_at','DESC']],
     limit:limit,
     offset:offset,
     distinct:true})
     
     const totalPages = Math.ceil(count / limit);
 
-    const distribution=getSellerRatingStats(seller.id)
-
+    const distribution= await getSellerRatingStats(seller.id)
+    
     return{
       averageRating: seller.rating ,   
       totalReviews:seller.ratingCount,
