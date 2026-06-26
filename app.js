@@ -26,6 +26,8 @@ app.use(cookieParser());
 app.use("/api/auth", authRoute);
 app.use("/api/product", productRoute);
 app.use("/api/order", orderRoute);
+app.use("/api/seller/review",reviewRoute)
+app.use("/api/seller/notification",notificationRoute)
 
 app.use((req, res, next) => {
   apiResponse.sendFail(
