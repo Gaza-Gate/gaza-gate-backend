@@ -4,3 +4,4 @@ const isauthenticated=require('../middlewares/auth/verifyToken.middleware');
 
 router.get("/",isauthenticated,reviewController.getSellerReviews)
 
+module.exports=router;
