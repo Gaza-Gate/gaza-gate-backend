@@ -17,23 +17,9 @@ router.get("/dashboard",isauthenticated,asyncWrapper(sellerController.getDashboa
 router.get("/viewProfile",isauthenticated,asyncWrapper(sellerController.getSellerProfile))
 
 //Update seller store and account information
-router.put("/updateProfile",isauthenticated,filterBody([
-    "firstName",
-    "lastName",
-    "phone",
-    "avatar",
-    "storeName",
-    "storeDescription",
-    "neighborhood",
-    "street",
-    "notes"
-  ]),sellerValidator.updateProfileValidation,requestsValidator,asyncWrapper(sellerController.updateSellerProfile))
+router.put("/updateProfile",isauthenticated,sellerValidator.updateProfileValidation,requestsValidator,sellerController.updateSellerProfile)
 
-  router.put("/updatePassword",
-    isauthenticated,
-    filterBody(['currentPassword','newPassword','confirmPassword']),
-    sellerValidator.updatePasswordValidation,requestsValidator,
-    asyncWrapper(sellerController.updatePassword))
+router.put("/updatePassword",isauthenticated,sellerValidator.updatePasswordValidation,requestsValidator,sellerController.updatePassword)
 
 
 // List of seller products

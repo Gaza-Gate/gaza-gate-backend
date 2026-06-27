@@ -9,3 +9,5 @@ router.patch("/read-all",isauthenticated,notificationController.markAllAsRead)
 router.patch("/:notificationId/read",isauthenticated,notificationController.markAsRead)
 
 router.delete("/",isauthenticated,notificationController.deleteAllNotifications)
+
+module.exports=router

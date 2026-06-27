@@ -90,7 +90,7 @@ const updateProfileValidation = [
 ];
 
 const updatePasswordValidation=[
-  
+
     body('currentPassword')
     .optional()
     .notEmpty()

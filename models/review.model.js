@@ -9,6 +9,11 @@ const Review = sequelize.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
+    sellerId:{
+      type: DataTypes.UUID,
+      allowNull: false,
+      field: "seller_id",
+    },
     customerId: {
       type: DataTypes.UUID,
       allowNull: false,

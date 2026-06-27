@@ -6,7 +6,7 @@ async function startServer() {
   try {
     await connectDB();
     
-    //await sequelize.sync();
+    await sequelize.sync();
     await seedRoles();
 
     app.listen(process.env.PORT, () => {
