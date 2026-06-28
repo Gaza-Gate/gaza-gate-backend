@@ -6,6 +6,11 @@ const cookieParser = require("cookie-parser");
 const authRoute = require("./routes/auth.route.js");
 const apiResponse = require("./utils/apiResponse.util.js");
 const errorHandler = require("./middlewares/common/errorHandler.middleware.js");
+const reviewRoute=require("./routes/review.route.js");
+const notificationRoute=require("./routes/notification.route.js");
+const profileRoute=require("./routes/profile.route.js");
+const dashboardRoute=require("./routes/dashboard.route.js");
+
 
 const app = express();
 
@@ -21,6 +26,10 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use("/api/auth", authRoute);
+app.use("/api/seller/review",reviewRoute);
+app.use("/api/seller/notification",notificationRoute);
+app.use("/api/seller/profile",profileRoute);
+app.use("/api/seller/dashboard",dashboardRoute);
 
 app.use((req, res, next) => {
   apiResponse.sendFail(
