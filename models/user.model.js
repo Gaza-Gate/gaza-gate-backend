@@ -71,10 +71,16 @@ const User = sequelize.define(
     avatar: {
       type: DataTypes.STRING(255),
       allowNull: false,
-      defaultValue: "uploads/default-avatar.png",
+      defaultValue: "https://res.cloudinary.com/docqumxby/image/upload/v1782654749/avatars/ed38ec20-b41c-4f7a-ba15-279bcb0033fd/pfjflobola9upah28yy0.png",
       validate: {
         notEmpty: true,
       },
+    },
+    publicId: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      defaultValue: 'avatars/ed38ec20-b41c-4f7a-ba15-279bcb0033fd',
+      field: "public_id",
     },
     isVerified: {
       type: DataTypes.BOOLEAN,

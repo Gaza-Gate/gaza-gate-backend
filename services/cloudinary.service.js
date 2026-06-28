@@ -16,6 +16,7 @@ const uploadImage = (buffer, folder = "avatars") => {
           publicId: result.public_id,
         });
       }
+      
     );
 
     Readable.from(buffer).pipe(uploadStream);

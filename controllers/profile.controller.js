@@ -13,7 +13,7 @@ const getSellerProfile=asyncWrapper(async(req,res)=>{
 });
 
 const updateSellerProfile=asyncWrapper(async(req,res)=>{
-   await profileService.updateSellerProfile(req.user.id,req.body,req.file.buffer)
+   await profileService.updateSellerProfile(req.user.id,req.body,req.file)
 
    return apiResponse.sendSuccess(res,{message:"profile update successfully"},200)
 });

@@ -7,7 +7,6 @@ const Address=require('../models/address.model.js');
 const AppError = require("../utils/AppError.util.js");
 const Order=require("../models/order.model.js");
 const passwordService=require("../utils/password.util.js");
-const {deleteImage}=require("./image.service.js");
 const cloudinaryService=require("./cloudinary.service.js")
 const ORDER_STATUSES = require("../constants/orderStatuses.constant.js");
 
@@ -88,47 +87,60 @@ const updateSellerProfile= async(userId,data,file)=>{
   }
   const folder=`avatars/${userId}`
   let uploadedImage=null;
-  let oldAvatar = null;
+  let oldAvatarPublicId = null;
   if (file) {
-     uploadedImage = await cloudinaryService.uploadImage(file, folder);
+     uploadedImage = await cloudinaryService.uploadImage(file.buffer, folder);
     const existingUser = await User.findOne({
       where: { id: userId },
-      attributes: ['avatar'],
+      attributes: ['avatar','publicId'],
     });
-    oldAvatar = existingUser?.avatar ?? null;
+    oldAvatarPublicId = existingUser?.publicId ?? null;
     userData.avatar = uploadedImage.url;
+    userData.publicId=uploadedImage.publicId
   }
 
 const transaction = await sequelize.transaction();
 
 try {
-  await Seller.update(sellerData, {
-    where: { userId: userId },
-    transaction
-  });
+  if (Object.keys(sellerData).length > 0) {
+      await Seller.update(sellerData, {
+        where: { userId: userId },
+        transaction
+      });
+    }
 
-  await User.update(userData, {
-    where: { id: userId }, 
-    transaction
-  });
-  const address = await Address.findOne({where:{userId:userId}})
-  if(!address){
-    await Address.create({
-      userId:userId,...addressData},{transaction}) 
-  }else{
-    await Address.update(addressData,{
-    where:{userId:userId},
-    transaction
-  })
-  }
+    if (Object.keys(userData).length > 0) {
+      await User.update(userData, {
+        where: { id: userId },
+        transaction
+      });
+    }
+
+    if (Object.keys(addressData).length > 0) {
+      const address = await Address.findOne({ where: { userId: userId } });
+      
+      if (!address) {
+        await Address.create({
+          userId: userId, 
+          ...addressData
+        }, { transaction });
+      } else {
+        await Address.update(addressData, {
+          where: { userId: userId },
+          transaction
+        });
+      }
+    }
 
   await transaction.commit();
 
-  if (file && oldAvatar) deleteImage(oldAvatar);
+  if (file && oldAvatarPublicId) cloudinaryService.deleteImage(oldAvatarPublicId);
 } catch (error) {
  
   await transaction.rollback();
-  if (file) deleteImage(file.filename);
+  if (uploadedImage?.publicId) {
+    await cloudinaryService.deleteImage(uploadedImage.publicId);
+    }
   throw error;
 }
 }

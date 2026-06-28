@@ -34,9 +34,9 @@ const getNotificationStats=async(userId)=>{
   return {
     total: Object.values(map).reduce((s, c) => s + c, 0),
     order: map[NOTIFICATION_TYPES.ORDER] || 0,
-    general: map[NOTIFICATION_TYPES.GENERAL] || 0,
     system: map[NOTIFICATION_TYPES.SYSTEM] || 0,
-    promotional: map[NOTIFICATION_TYPES.PROMOTIONAL] || 0,
+    product: map[NOTIFICATION_TYPES.PRODUCT] || 0,
+    review: map[NOTIFICATION_TYPES.REVIEW] || 0,
     unRead:unReadCount
 
   };

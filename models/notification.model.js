@@ -18,9 +18,9 @@ const Notification = sequelize.define(
     type: {
       type: DataTypes.ENUM(
         NOTIFICATION_TYPES.SYSTEM,
-        NOTIFICATION_TYPES.PROMOTIONAL,
+        NOTIFICATION_TYPES.REVIEW,
         NOTIFICATION_TYPES.ORDER,
-        NOTIFICATION_TYPES.ACCOUNT,
+        NOTIFICATION_TYPES.PRODUCT,
         NOTIFICATION_TYPES.GENERAL
       ),
       allowNull: false,
