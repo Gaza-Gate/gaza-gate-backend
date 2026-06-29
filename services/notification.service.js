@@ -66,7 +66,7 @@ const getNotifications=async(userId,query)=>{
         where: { id: userId },
         attributes: [],           
         through: {
-          attributes: ['isRead'],  
+          attributes: [],  
         },
       },
       {
@@ -109,7 +109,7 @@ const getNotifications=async(userId,query)=>{
     title: n.title,
     content: n.content,
     actionUrl: n.actionUrl,
-    isRead:userNotifications.isRead,
+    isRead:userNotifications.isRead ?? false,
     sentAt: n.sentAt,
     sender: n.sender
       ? {

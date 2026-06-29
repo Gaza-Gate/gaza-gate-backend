@@ -149,19 +149,19 @@ try {
 const updatePassword= async(userId,data)=> {
   const user=await User.findOne({where:{id:userId},attributes:['id', 'password', 'passwordChangedAt']})
   
-  if (!user)throw new AppError.fail("user not found",404);
+  if (!user) throw  AppError.fail("user not found",404);
   
   const isEquel=await passwordService.comparePassword(data.currentPassword,user.password);
   
-  if(!isEquel) throw new AppError().fail("Current password is incorrect",400);
+  if(!isEquel) throw  AppError.fail("Current password is incorrect",400);
   const isSame = await passwordService.comparePassword(
     data.newPassword,
     user.password
   );
-  if (isSame) throw AppError.fail('New password must be different from current password', 400);
 
-   
   if(data.newPassword !== data.confirmPassword) throw new AppError.fail("Password not match",400);
+  
+  if (isSame) throw AppError.fail('New password must be different from current password', 400);
   
   user.password=await passwordService.hashPassword(data.newPassword)
   user.passwordChangedAt= new Date();
