@@ -147,7 +147,7 @@ const getNotifications=async(userId,query)=>{
     { where: { userId, isRead: false } }   
   );
   
-  return { readedCount };
+  return  readedCount ;
   }
 
 const markAsRead=async(userId,notificationId)=>{
@@ -162,7 +162,7 @@ const markAsRead=async(userId,notificationId)=>{
   userNotification.isRead = true;
   await userNotification.save();
  
-  return { userNotification };
+  return  userNotification ;
 }
 
 const deleteAllNotifications = async (userId) => {
@@ -170,7 +170,7 @@ const deleteAllNotifications = async (userId) => {
         where: { userId },
   });
   
-  return { deletedCount };
+  return deletedCount ;
 };
 
 module.exports={getNotifications,markAllAsRead,markAsRead,deleteAllNotifications}

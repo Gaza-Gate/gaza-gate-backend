@@ -10,17 +10,17 @@ const getNotifications =asyncWrapper(async (req, res) => {
  
 const markAsRead = asyncWrapper(async (req, res) => {
   const data = await notificationService.markAsRead(req.user.id,req.params.notificationId);
-  return apiResponse.sendSuccess(res, data, 200);
+  return apiResponse.sendSuccess(res, {data}, 200);
 });
  
 const markAllAsRead =asyncWrapper(async (req, res) => {
   const data = await notificationService.markAllAsRead(req.user.id);
-  return apiResponse.sendSuccess(res, data, 200);
+  return apiResponse.sendSuccess(res, {data}, 200);
 });
  
 const deleteAllNotifications = asyncWrapper( async (req, res) => {
   const data = await notificationService.deleteAllNotifications(req.user.id);
-  return apiResponse.sendSuccess(res, data, 200);
+  return apiResponse.sendSuccess(res, {data}, 200);
 })
  
 module.exports = {
