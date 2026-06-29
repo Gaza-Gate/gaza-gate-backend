@@ -13,7 +13,7 @@ const ORDER_STATUSES = require("../constants/orderStatuses.constant.js");
 
 const getDashboard=async(userId)=>{
   const seller=await Seller.findOne({where:{userId:userId},attributes:['id','rating','ratingCount']})
-  if(!seller)throw new AppError.fail("Seller not found",404);
+  if(!seller)throw  AppError.fail("Seller not found",404);
   
    const [completedOrder, waitingOrder, inProgressOrder, activeProduct] = await Promise.all([
     Order.count({ where: { sellerId: seller.id, status: ORDER_STATUSES.COMPLETED } }),

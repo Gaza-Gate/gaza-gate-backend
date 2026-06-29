@@ -74,9 +74,12 @@ const updateSellerProfile= async(userId,data,file)=>{
   const userFields = ['firstName', 'lastName', 'phone', 'avatar'];
   const addressFields = ['neighborhood', 'street', 'notes']
 
+
   const sellerData = {};
   const userData = {};
   const addressData = {};
+
+  if(!data) data={};
 
   if (data.email) throw AppError.fail('Email cannot be updated', 400);
 
@@ -117,7 +120,7 @@ try {
     }
 
     if (Object.keys(addressData).length > 0) {
-      const address = await Address.findOne({ where: { userId: userId } });
+      const address = await Address.findOne({ where: { userId: userId },transaction });
       
       if (!address) {
         await Address.create({

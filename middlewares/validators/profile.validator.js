@@ -1,5 +1,6 @@
 const { body} = require("express-validator");
 const updateProfileValidation = [
+
   body('email')
     .not()
     .exists()

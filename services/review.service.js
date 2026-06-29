@@ -8,9 +8,6 @@ const Product=require("../models/product.model.js");
 const AppError = require("../utils/AppError.util.js");
 const PAGINATION=require("../constants/pagination.constant.js")
 
-const getSellerIdFromRequest = (req) => {
-  return req.user?.id || req.seller?.id || null;
-};
 
 const  getSellerRatingStats=async(sellerId)=>{
   const rows = await Review.findAll({

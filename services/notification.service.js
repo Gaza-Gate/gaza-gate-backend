@@ -56,7 +56,6 @@ const getNotifications=async(userId,query)=>{
   const notificationWhere = {};
   if (type) notificationWhere.type = type;
 
-   // Fix: Destructure the array returned by Promise.all
   const [{ count, rows }, stats] = await Promise.all([
     Notification.findAndCountAll({
       include: [
@@ -109,7 +108,7 @@ const getNotifications=async(userId,query)=>{
     title: n.title,
     content: n.content,
     actionUrl: n.actionUrl,
-    isRead:userNotifications.isRead ?? false,
+    isRead:userNotifications.isRead,
     sentAt: n.sentAt,
     sender: n.sender
       ? {
