@@ -1,0 +1,9 @@
+const NOTIFICATION_TYPES = Object.freeze({
+  SYSTEM: "SYSTEM",
+  REVIEW: "REVIEW",
+  ORDER: "ORDER",
+  PRODUCT: "PRODUCT",
+  GENERAL: "GENERAL",
+});
+
+module.exports = NOTIFICATION_TYPES;
