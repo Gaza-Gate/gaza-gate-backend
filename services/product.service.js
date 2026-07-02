@@ -5,47 +5,14 @@ const Product = require("../models/product.model.js");
 const ProductImage = require("../models/productImage.model.js");
 const Category = require("../models/category.model.js");
 const Seller = require("../models/seller.model");
-const Customer = require("../models/customer.model.js");
 const Wishlist = require("../models/wishlist.model.js");
 const cloudinaryService = require("./cloudinary.service.js");
 const AppError = require("../utils/AppError.util.js");
-const token = require("../utils/token.util.js");
-const USER_ROLES = require("../constants/userRoles.constant.js");
+const resolveCustomerIdFromRequest = require("../utils/resolveCustomerIdFromRequest.util.js");
 const PRODUCT_STOCK_TYPES = require("../constants/stockType.constants.js");
 const PRODUCT_STATUS = require("../constants/productStatus.constants.js");
 const PAGINATION = require("../constants/pagination.constant.js");
-
-const PUBLIC_SORT_OPTIONS = {
-  price_asc: [["price", "ASC"]],
-  price_desc: [["price", "DESC"]],
-  newest: [["created_at", "DESC"]],
-  rating: [["average_rating", "DESC"]],
-};
-
-const resolveCustomerIdFromRequest = async (req) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return null;
-    }
-
-    const accessToken = authHeader.split(" ")[1];
-    const decoded = token.verifyAccessToken(accessToken);
-
-    if (decoded.role !== USER_ROLES.CUSTOMER) {
-      return null;
-    }
-
-    const customer = await Customer.findOne({
-      where: { userId: decoded.userId },
-      attributes: ["id"],
-    });
-
-    return customer?.id ?? null;
-  } catch (error) {
-    return null;
-  }
-};
+const PUBLIC_SORT_OPTIONS = require("../constants/sort-options.constants.js");
 
 const getSellerIdFromRequest = (req) => {
   return req.user?.id || req.user?.userId || null;
