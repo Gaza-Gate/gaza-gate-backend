@@ -27,10 +27,22 @@ const deleteProduct = asyncWrapper(async (req, res) => {
   return apiResponse.sendSuccess(res, null, 200);
 });
 
+const getAllProductsPublic = asyncWrapper(async (req, res) => {
+  const result = await productService.getAllProductsPublic(req);
+  return apiResponse.sendSuccess(res, result, 200);
+});
+
+const getProductDetailsPublic = asyncWrapper(async (req, res) => {
+  const result = await productService.getProductDetailsPublic(req);
+  return apiResponse.sendSuccess(res, result, 200);
+});
+
 module.exports = {
   getSellerProducts,
   createProduct,
   updateProduct,
   toggleStatus,
   deleteProduct,
+  getAllProductsPublic,
+  getProductDetailsPublic,
 };

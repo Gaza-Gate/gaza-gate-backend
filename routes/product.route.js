@@ -5,8 +5,26 @@ const {
   createProductValidator,
   updateProductValidator,
 } = require("../middlewares/validators/product.validator.js");
+const {
+  getAllProductsPublicValidator,
+  getProductDetailsPublicValidator,
+} = require("../middlewares/validators/customerProduct.validator.js");
 const productController = require("../controllers/product.controller.js");
 const authenticateAccessToken = require("../middlewares/auth/verifyToken.middleware.js");
+
+router.get(
+  "/public",
+  getAllProductsPublicValidator,
+  requestsValidator,
+  productController.getAllProductsPublic,
+);
+
+router.get(
+  "/public/:id",
+  getProductDetailsPublicValidator,
+  requestsValidator,
+  productController.getProductDetailsPublic,
+);
 
 router.get("/", authenticateAccessToken, productController.getSellerProducts);
 

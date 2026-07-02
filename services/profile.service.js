@@ -188,7 +188,7 @@ const updatePassword = async (userId, data) => {
   );
 
   if (data.newPassword !== data.confirmPassword)
-    throw new AppError.fail("Password not match", 400);
+    throw AppError.fail("Password not match", 400);
 
   if (isSame)
     throw AppError.fail(

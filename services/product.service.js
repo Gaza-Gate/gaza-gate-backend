@@ -1,13 +1,51 @@
 const { Op } = require("sequelize");
+const uuidValidate = require("uuid-validate");
 const { sequelize } = require("../config/db.config.js");
 const Product = require("../models/product.model.js");
 const ProductImage = require("../models/productImage.model.js");
+const Category = require("../models/category.model.js");
 const Seller = require("../models/seller.model");
+const Customer = require("../models/customer.model.js");
+const Wishlist = require("../models/wishlist.model.js");
 const cloudinaryService = require("./cloudinary.service.js");
 const AppError = require("../utils/AppError.util.js");
+const token = require("../utils/token.util.js");
+const USER_ROLES = require("../constants/userRoles.constant.js");
 const PRODUCT_STOCK_TYPES = require("../constants/stockType.constants.js");
 const PRODUCT_STATUS = require("../constants/productStatus.constants.js");
 const PAGINATION = require("../constants/pagination.constant.js");
+
+const PUBLIC_SORT_OPTIONS = {
+  price_asc: [["price", "ASC"]],
+  price_desc: [["price", "DESC"]],
+  newest: [["created_at", "DESC"]],
+  rating: [["average_rating", "DESC"]],
+};
+
+const resolveCustomerIdFromRequest = async (req) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return null;
+    }
+
+    const accessToken = authHeader.split(" ")[1];
+    const decoded = token.verifyAccessToken(accessToken);
+
+    if (decoded.role !== USER_ROLES.CUSTOMER) {
+      return null;
+    }
+
+    const customer = await Customer.findOne({
+      where: { userId: decoded.userId },
+      attributes: ["id"],
+    });
+
+    return customer?.id ?? null;
+  } catch (error) {
+    return null;
+  }
+};
 
 const getSellerIdFromRequest = (req) => {
   return req.user?.id || req.user?.userId || null;
@@ -311,10 +349,203 @@ const deleteProduct = async (req) => {
   return { message: "Product deleted successfully." };
 };
 
+const getAllProductsPublic = async (req) => {
+  const page = Math.max(Number(req.query.page) || PAGINATION.DEFAULT_PAGE, 1);
+  const limit = PAGINATION.DEFAULT_LIMIT;
+  const offset = (page - 1) * limit;
+  const search = req.query.search?.trim() || "";
+  const sort = req.query.sort || "newest";
+
+  const where = {
+    status: PRODUCT_STATUS.ACTIVE,
+    isDeleted: false,
+  };
+
+  if (search) {
+    where.name = { [Op.like]: `%${search}%` };
+  }
+
+  if (req.query.categoryId) {
+    where.categoryId = req.query.categoryId;
+  }
+
+  if (req.query.minPrice !== undefined || req.query.maxPrice !== undefined) {
+    where.price = {};
+    if (req.query.minPrice !== undefined) {
+      where.price[Op.gte] = req.query.minPrice;
+    }
+    if (req.query.maxPrice !== undefined) {
+      where.price[Op.lte] = req.query.maxPrice;
+    }
+  }
+
+  const order = PUBLIC_SORT_OPTIONS[sort] || PUBLIC_SORT_OPTIONS.newest;
+
+  const { count, rows } = await Product.findAndCountAll({
+    where,
+    attributes: [
+      "id",
+      "name",
+      "price",
+      "stockType",
+      "quantity",
+      "averageRating",
+      "reviewsCount",
+      "created_at",
+    ],
+    include: [
+      {
+        model: Category,
+        as: "category",
+        attributes: ["id", "name"],
+      },
+      {
+        model: Seller,
+        as: "seller",
+        attributes: ["id", "storeName"],
+      },
+      {
+        model: ProductImage,
+        as: "images",
+        where: { isPrimary: true },
+        required: false,
+        attributes: ["imageUrl"],
+      },
+    ],
+    order,
+    limit,
+    offset,
+    distinct: true,
+  });
+
+  const products = rows.map((product) => {
+    const primaryImage = product.images?.[0];
+
+    return {
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      stockType: product.stockType,
+      quantity: product.quantity,
+      averageRating: product.averageRating,
+      reviewsCount: product.reviewsCount,
+      category: product.category
+        ? { id: product.category.id, name: product.category.name }
+        : null,
+      seller: product.seller ? { storeName: product.seller.storeName } : null,
+      primaryImage: primaryImage ? { imageUrl: primaryImage.imageUrl } : null,
+    };
+  });
+
+  const totalPages = Math.ceil(count / limit);
+
+  return {
+    products,
+    pagination: {
+      totalItems: count,
+      totalPages,
+      currentPage: page,
+      pageSize: limit,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  };
+};
+
+const getProductDetailsPublic = async (req) => {
+  const { id } = req.params;
+
+  if (!uuidValidate(id, 4)) {
+    throw AppError.fail("Invalid product ID.", 400);
+  }
+
+  const customerId = await resolveCustomerIdFromRequest(req);
+
+  const product = await Product.findOne({
+    where: {
+      id,
+      status: PRODUCT_STATUS.ACTIVE,
+      isDeleted: false,
+    },
+    attributes: [
+      "id",
+      "name",
+      "description",
+      "price",
+      "stockType",
+      "quantity",
+      "status",
+      "averageRating",
+      "reviewsCount",
+    ],
+    include: [
+      {
+        model: Category,
+        as: "category",
+        attributes: ["id", "name"],
+      },
+      {
+        model: Seller,
+        as: "seller",
+        attributes: ["id", "storeName"],
+      },
+      {
+        model: ProductImage,
+        as: "images",
+        attributes: ["id", "imageUrl", "isPrimary", "position"],
+        separate: true,
+        order: [["position", "ASC"]],
+      },
+    ],
+  });
+
+  if (!product) {
+    throw AppError.fail("Product not found.", 404);
+  }
+
+  let isWishlisted = false;
+
+  if (customerId) {
+    const wishlistItem = await Wishlist.findOne({
+      where: { customerId, productId: product.id },
+    });
+    isWishlisted = !!wishlistItem;
+  }
+
+  return {
+    product: {
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      stockType: product.stockType,
+      quantity: product.quantity,
+      status: product.status,
+      averageRating: product.averageRating,
+      reviewsCount: product.reviewsCount,
+      category: product.category
+        ? { id: product.category.id, name: product.category.name }
+        : null,
+      seller: product.seller
+        ? { id: product.seller.id, storeName: product.seller.storeName }
+        : null,
+      images: (product.images || []).map((image) => ({
+        id: image.id,
+        imageUrl: image.imageUrl,
+        isPrimary: image.isPrimary,
+        position: image.position,
+      })),
+      isWishlisted,
+    },
+  };
+};
+
 module.exports = {
   getSellerProducts,
   createProduct,
   updateProduct,
   toggleStatus,
   deleteProduct,
+  getAllProductsPublic,
+  getProductDetailsPublic,
 };
