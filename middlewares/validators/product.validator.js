@@ -53,6 +53,11 @@ const createProductValidator = [
     .optional()
     .isIn(Object.values(PRODUCT_STATUS))
     .withMessage("Invalid status"),
+  body("isOptimized")
+    .optional()
+    .isBoolean()
+    .withMessage("isOptimized must be true or false")
+    .toBoolean(),
   body("description")
     .optional()
     .trim()
@@ -106,6 +111,11 @@ const updateProductValidator = [
     .optional()
     .isIn(Object.values(PRODUCT_STATUS))
     .withMessage("Invalid status"),
+  body("isOptimized")
+    .optional()
+    .isBoolean()
+    .withMessage("isOptimized must be true or false")
+    .toBoolean(),
   body("description")
     .optional()
     .trim()

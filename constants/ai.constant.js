@@ -4,6 +4,7 @@ const AI = Object.freeze({
   REQUEST_TIMEOUT_MS: 60000,
   MAX_PROMPT_LENGTH: 1000,
   MAX_OUTPUT_TOKENS: 8192,
+  SITE_IDENTITY_IMAGE_URL: process.env.SITE_IDENTITY_IMAGE_URL || "",
 });
 
 module.exports = AI;

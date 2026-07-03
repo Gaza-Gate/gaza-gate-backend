@@ -12,7 +12,7 @@ const buildPrompt = (customPrompt) => {
     "The FIRST image is a product photo. The SECOND image is the store's visual identity (brand logo, colors, and style).",
     "Produce a single high-quality, e-commerce-ready image of the SAME product:",
     "- keep the product shape, details, and proportions accurate (do not invent or distort the product),",
-    "- tastefully apply the brand's colors, style, and (subtly) the logo from the identity image,",
+    "- tastefully apply the brand's colors, style, and (subtly) the logo from the identity image and don't add any color not in the identity image,",
     "- clean up and improve the background so it looks professional,",
     "- enhance lighting, sharpness, and overall image quality.",
     "Output only the final edited image.",
@@ -22,29 +22,18 @@ const buildPrompt = (customPrompt) => {
   return trimmed ? `${base}\n\nAdditional instructions from the seller: ${trimmed}` : base;
 };
 
-const generateBrandedProductImage = async (req) => {
+// Core call: takes a product image + identity image and returns the edited image as a Buffer.
+const runImageEdit = async ({
+  productBuffer,
+  productMimeType,
+  identityBuffer,
+  identityMimeType,
+  prompt,
+}) => {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw AppError.error("AI image service is not configured.", 500);
   }
-
-  const userId = req.user?.id;
-  if (!userId) {
-    throw AppError.fail("Seller authentication data is missing.", 401);
-  }
-
-  const productFile = req.files?.productImage?.[0];
-  const identityFile = req.files?.identityImage?.[0];
-  if (!productFile) throw AppError.fail("Product image is required.", 400);
-  if (!identityFile) {
-    throw AppError.fail("Visual identity image is required.", 400);
-  }
-
-  const seller = await Seller.findOne({
-    where: { userId },
-    attributes: ["id"],
-  });
-  if (!seller) throw AppError.fail("Seller not found.", 404);
 
   const requestBody = {
     model: AI.IMAGE_MODEL,
@@ -54,17 +43,15 @@ const generateBrandedProductImage = async (req) => {
       {
         role: "user",
         content: [
-          { type: "text", text: buildPrompt(req.body?.prompt) },
+          { type: "text", text: buildPrompt(prompt) },
           {
             type: "image_url",
-            image_url: {
-              url: bufferToDataUrl(productFile.buffer, productFile.mimetype),
-            },
+            image_url: { url: bufferToDataUrl(productBuffer, productMimeType) },
           },
           {
             type: "image_url",
             image_url: {
-              url: bufferToDataUrl(identityFile.buffer, identityFile.mimetype),
+              url: bufferToDataUrl(identityBuffer, identityMimeType),
             },
           },
         ],
@@ -123,7 +110,80 @@ const generateBrandedProductImage = async (req) => {
   }
 
   const base64Data = generatedUrl.split(",")[1];
-  const outputBuffer = Buffer.from(base64Data, "base64");
+  return Buffer.from(base64Data, "base64");
+};
+
+// Loads the single, site-wide visual identity image used to brand every product.
+const fetchSiteIdentityImage = async () => {
+  const identityUrl = AI.SITE_IDENTITY_IMAGE_URL;
+  if (!identityUrl) {
+    throw AppError.error(
+      "The site visual identity image is not configured.",
+      500,
+    );
+  }
+
+  let response;
+  try {
+    response = await fetch(identityUrl);
+  } catch (error) {
+    throw AppError.error("Failed to load the site visual identity image.", 502);
+  }
+
+  if (!response.ok) {
+    throw AppError.error("Failed to load the site visual identity image.", 502);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    mimeType: response.headers.get("content-type") || "image/png",
+  };
+};
+
+// Optimizes a product image against the fixed site identity and returns a Buffer.
+const optimizeProductImageBuffer = async (
+  productBuffer,
+  productMimeType,
+  prompt,
+) => {
+  const identity = await fetchSiteIdentityImage();
+  return runImageEdit({
+    productBuffer,
+    productMimeType,
+    identityBuffer: identity.buffer,
+    identityMimeType: identity.mimeType,
+    prompt,
+  });
+};
+
+// Standalone endpoint: seller uploads both the product image and an identity image.
+const generateBrandedProductImage = async (req) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    throw AppError.fail("Seller authentication data is missing.", 401);
+  }
+
+  const productFile = req.files?.productImage?.[0];
+  const identityFile = req.files?.identityImage?.[0];
+  if (!productFile) throw AppError.fail("Product image is required.", 400);
+  if (!identityFile) {
+    throw AppError.fail("Visual identity image is required.", 400);
+  }
+
+  const seller = await Seller.findOne({
+    where: { userId },
+    attributes: ["id"],
+  });
+  if (!seller) throw AppError.fail("Seller not found.", 404);
+
+  const outputBuffer = await runImageEdit({
+    productBuffer: productFile.buffer,
+    productMimeType: productFile.mimetype,
+    identityBuffer: identityFile.buffer,
+    identityMimeType: identityFile.mimetype,
+    prompt: req.body?.prompt,
+  });
 
   const uploaded = await cloudinaryService.uploadImage(
     outputBuffer,
@@ -133,4 +193,4 @@ const generateBrandedProductImage = async (req) => {
   return { imageUrl: uploaded.url };
 };
 
-module.exports = { generateBrandedProductImage };
+module.exports = { generateBrandedProductImage, optimizeProductImageBuffer };

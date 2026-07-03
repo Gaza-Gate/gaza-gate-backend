@@ -13,6 +13,7 @@ const profileRoute = require("./routes/profile.route.js");
 const customerProfileRoute = require("./routes/customerProfile.route.js");
 const dashboardRoute = require("./routes/dashboard.route.js");
 const aiRoute = require("./routes/ai.route.js");
+const customerChatbotRoute = require("./routes/customerChatbot.route.js");
 const apiResponse = require("./utils/apiResponse.util.js");
 const errorHandler = require("./middlewares/common/errorHandler.middleware.js");
 
@@ -38,6 +39,7 @@ app.use("/api/seller/profile", profileRoute);
 app.use("/api/profile", customerProfileRoute);
 app.use("/api/seller/dashboard", dashboardRoute);
 app.use("/api/seller/ai", aiRoute);
+app.use("/api/customer/chatbot", customerChatbotRoute);
 
 app.use((req, res, next) => {
   apiResponse.sendFail(res, { message: "Route not found!" }, 404);
