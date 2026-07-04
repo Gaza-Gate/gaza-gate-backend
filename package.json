@@ -28,7 +28,11 @@
     "openai": "^6.45.0",
     "resend": "^6.14.0",
     "sequelize": "^6.37.8",
+    "socket.io": "^4.8.3",
     "uuid-validate": "^0.0.3",
     "validator": "^13.15.35"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
   }
 }

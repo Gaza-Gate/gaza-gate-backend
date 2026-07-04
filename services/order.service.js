@@ -14,6 +14,8 @@ const {
   STATUS_LABELS,
 } = require("../constants/orderStatusTransitions.constants");
 const PAGINATION = require("../constants/pagination.constant");
+const NOTIFICATION_TYPES = require("../constants/notificationTypes.constant");
+const notificationService = require("./notification.service");
 
 const getSellerFromRequest = async (req) => {
   const userId = req.user?.id || req.user?.userId || null;
@@ -214,6 +216,26 @@ const updateOrderStatus = async (req) => {
 
   await order.reload();
 
+  const customer = await Customer.findByPk(order.customerId, {
+    attributes: ["userId"],
+  });
+  if (customer?.userId) {
+    await notificationService.notifySafely({
+      recipientUserIds: [customer.userId],
+      senderId: req.user?.id || req.user?.userId || null,
+      type: NOTIFICATION_TYPES.ORDER,
+      title: "تحديث حالة الطلب",
+      content: `تم تحديث حالة طلبك ${order.orderNumber} إلى "${STATUS_LABELS[nextStatus]}"`,
+      relatedOrderId: order.id,
+      actionUrl: `/orders/${order.id}`,
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: nextStatus,
+      },
+    });
+  }
+
   return {
     orderId: order.id,
     updatedStatus: nextStatus,
@@ -251,6 +273,26 @@ const rejectOrder = async (req) => {
   });
 
   await order.reload();
+
+  const customer = await Customer.findByPk(order.customerId, {
+    attributes: ["userId"],
+  });
+  if (customer?.userId) {
+    await notificationService.notifySafely({
+      recipientUserIds: [customer.userId],
+      senderId: req.user?.id || req.user?.userId || null,
+      type: NOTIFICATION_TYPES.ORDER,
+      title: "تم رفض الطلب",
+      content: `تم رفض طلبك ${order.orderNumber}. السبب: ${order.rejectionReason}`,
+      relatedOrderId: order.id,
+      actionUrl: `/orders/${order.id}`,
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: ORDER_STATUSES.REJECTED,
+      },
+    });
+  }
 
   return {
     orderId: order.id,

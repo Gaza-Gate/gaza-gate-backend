@@ -13,6 +13,8 @@ const ORDER_STATUSES = require("../constants/orderStatuses.constant.js");
 const PAGINATION = require("../constants/pagination.constant.js");
 const PRODUCT_STATUS = require("../constants/productStatus.constants.js");
 const PRODUCT_STOCK_TYPES = require("../constants/stockType.constants.js");
+const NOTIFICATION_TYPES = require("../constants/notificationTypes.constant.js");
+const notificationService = require("./notification.service.js");
 
 const generateOrderNumber = () => {
   const timestamp = Date.now().toString().slice(-6);
@@ -225,6 +227,29 @@ const createOrder = async (req) => {
   } catch (error) {
     await transaction.rollback();
     throw error;
+  }
+
+  const senderId = req.user?.id || req.user?.userId || null;
+  for (const created of createdOrders) {
+    const seller = await Seller.findByPk(created.sellerId, {
+      attributes: ["userId"],
+    });
+    if (!seller?.userId) continue;
+
+    await notificationService.notifySafely({
+      recipientUserIds: [seller.userId],
+      senderId,
+      type: NOTIFICATION_TYPES.ORDER,
+      title: "طلب جديد",
+      content: `لديك طلب جديد برقم ${created.orderNumber}`,
+      relatedOrderId: created.id,
+      actionUrl: `/seller/orders/${created.id}`,
+      order: {
+        id: created.id,
+        orderNumber: created.orderNumber,
+        status: created.status,
+      },
+    });
   }
 
   return { orders: createdOrders };
@@ -456,6 +481,27 @@ const cancelOrder = async (req) => {
     }
 
     await transaction.commit();
+
+    const seller = await Seller.findByPk(order.sellerId, {
+      attributes: ["userId"],
+    });
+    if (seller?.userId) {
+      await notificationService.notifySafely({
+        recipientUserIds: [seller.userId],
+        senderId: req.user?.id || req.user?.userId || null,
+        type: NOTIFICATION_TYPES.ORDER,
+        title: "تم إلغاء الطلب",
+        content: `تم إلغاء الطلب ${order.orderNumber} من قبل العميل`,
+        relatedOrderId: order.id,
+        actionUrl: `/seller/orders/${order.id}`,
+        order: {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          status: ORDER_STATUSES.CANCELLED,
+        },
+      });
+    }
+
     return {
       order: {
         id: order.id,

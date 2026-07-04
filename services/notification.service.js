@@ -6,6 +6,118 @@ const UserNotification = require("../models/userNotification.model");
 const PAGINATION = require("../constants/pagination.constant");
 const NOTIFICATION_TYPES = require("../constants/notificationTypes.constant");
 const AppError = require("../utils/AppError.util.js");
+const { emitToUser } = require("../config/socket.config.js");
+
+const createNotification = async ({
+  recipientUserIds,
+  type = NOTIFICATION_TYPES.GENERAL,
+  title,
+  content = null,
+  actionUrl = null,
+  relatedOrderId = null,
+  senderId = null,
+  order = null,
+} = {}) => {
+  const recipients = [
+    ...new Set(
+      (Array.isArray(recipientUserIds)
+        ? recipientUserIds
+        : [recipientUserIds]
+      ).filter(Boolean),
+    ),
+  ];
+
+  if (!recipients.length) {
+    throw AppError.fail("At least one recipient is required.", 400);
+  }
+  if (!title || !String(title).trim()) {
+    throw AppError.fail("Notification title is required.", 400);
+  }
+
+  const allowedTypes = new Set(Object.values(NOTIFICATION_TYPES));
+  if (!allowedTypes.has(type)) {
+    throw AppError.fail("Invalid notification type.", 400);
+  }
+
+  const notification = await Notification.create({
+    senderId: senderId || null,
+    type,
+    title: String(title).trim(),
+    content,
+    actionUrl,
+    relatedOrderId:
+      type === NOTIFICATION_TYPES.ORDER ? relatedOrderId || null : null,
+  });
+
+  await UserNotification.bulkCreate(
+    recipients.map((userId) => ({
+      userId,
+      notificationId: notification.id,
+      isRead: false,
+    })),
+  );
+
+  let senderPayload = null;
+  if (senderId) {
+    const sender = await User.findByPk(senderId, {
+      attributes: ["id", "firstName", "lastName"],
+    });
+    if (sender) {
+      senderPayload = {
+        id: sender.id,
+        name: `${sender.firstName} ${sender.lastName}`.trim(),
+      };
+    }
+  }
+
+  let orderPayload = order || null;
+  if (!orderPayload && relatedOrderId) {
+    const relatedOrder = await Order.findByPk(relatedOrderId, {
+      attributes: ["id", "orderNumber", "status"],
+    });
+    if (relatedOrder) {
+      orderPayload = {
+        id: relatedOrder.id,
+        orderNumber: relatedOrder.orderNumber,
+        status: relatedOrder.status,
+      };
+    }
+  }
+
+  const notificationPayload = {
+    id: notification.id,
+    type: notification.type,
+    title: notification.title,
+    content: notification.content,
+    actionUrl: notification.actionUrl,
+    isRead: false,
+    sentAt: notification.sentAt,
+    sender: senderPayload,
+    order: orderPayload,
+  };
+
+  for (const userId of recipients) {
+    const unRead = await UserNotification.count({
+      where: { userId, isRead: false },
+    });
+
+    emitToUser(userId, "notification:new", {
+      notification: notificationPayload,
+      stats: { unRead },
+    });
+  }
+
+  return notificationPayload;
+};
+
+const notifySafely = async (params) => {
+  try {
+    return await createNotification(params);
+  } catch (error) {
+    console.error("Failed to create notification:", error.message || error);
+    return null;
+  }
+};
 
 const getNotificationStats = async (userId) => {
   const rows = await Notification.findAll({
@@ -175,6 +287,8 @@ const deleteAllNotifications = async (userId) => {
 };
 
 module.exports = {
+  createNotification,
+  notifySafely,
   getNotifications,
   markAllAsRead,
   markAsRead,
