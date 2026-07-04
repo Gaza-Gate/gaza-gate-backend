@@ -20,6 +20,7 @@ const UserNotification = require("./userNotification.model.js");
 const Review = require("./review.model.js");
 const Conversation = require("./conversation.model.js");
 const Message = require("./message.model.js");
+const UnansweredQuestion=require("./unansweredQuestion.model.js")
 
 // ==================== AUTH ====================
 
@@ -401,6 +402,29 @@ Message.belongsTo(Product, {
   onUpdate: "CASCADE",
 });
 
+// ==================== CHATBOT ====================
+
+User.hasMany(UnansweredQuestion, {
+  foreignKey: { name: "userId", field: "user_id" },
+  as: "unansweredQuestions",
+  onDelete: "CASCADE",
+});
+UnansweredQuestion.belongsTo(User, {
+  foreignKey: { name: "userId", field: "user_id" },
+  as: "user",
+  onDelete: "CASCADE",
+});
+
+User.hasMany(UnansweredQuestion, {
+  foreignKey: { name: "reviewedBy", field: "reviewed_by" },
+  as: "reviewedQuestions",
+  onDelete: "SET NULL",
+});
+UnansweredQuestion.belongsTo(User, {
+  foreignKey: { name: "reviewedBy", field: "reviewed_by" },
+  as: "reviewer",
+  onDelete: "SET NULL",
+});
 module.exports = {
   User,
   Role,
@@ -424,4 +448,5 @@ module.exports = {
   Review,
   Conversation,
   Message,
+  UnansweredQuestion
 };

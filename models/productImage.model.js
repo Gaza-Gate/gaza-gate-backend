@@ -30,6 +30,12 @@ const ProductImage = sequelize.define(
       defaultValue: false,
       field: "is_primary",
     },
+    isOptimized: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      field: "is_optimized",
+    },
     position: {
       type: DataTypes.INTEGER,
       allowNull: false,

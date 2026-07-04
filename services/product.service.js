@@ -7,6 +7,7 @@ const Category = require("../models/category.model.js");
 const Seller = require("../models/seller.model");
 const Wishlist = require("../models/wishlist.model.js");
 const cloudinaryService = require("./cloudinary.service.js");
+const aiService = require("./ai.service.js");
 const AppError = require("../utils/AppError.util.js");
 const resolveCustomerIdFromRequest = require("../utils/resolveCustomerIdFromRequest.util.js");
 const PRODUCT_STOCK_TYPES = require("../constants/stockType.constants.js");
@@ -16,6 +17,26 @@ const PUBLIC_SORT_OPTIONS = require("../constants/sort-options.constants.js");
 
 const getSellerIdFromRequest = (req) => {
   return req.user?.id || req.user?.userId || null;
+};
+
+// Downloads an already-stored (Cloudinary) image so it can be re-optimized.
+const fetchRemoteImage = async (url) => {
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    throw AppError.error("Failed to load the existing product image.", 502);
+  }
+
+  if (!response.ok) {
+    throw AppError.error("Failed to load the existing product image.", 502);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    mimeType: response.headers.get("content-type") || "image/jpeg",
+  };
 };
 
 const getSellerProducts = async (req) => {
@@ -87,10 +108,17 @@ const createProduct = async (req) => {
 
     const folder = `products/${sellerId}`;
 
-    uploadedImage = await cloudinaryService.uploadImage(
-      req.file.buffer,
-      folder,
-    );
+    const isOptimized =
+      req.body.isOptimized === true || req.body.isOptimized === "true";
+
+    const bufferToUpload = isOptimized
+      ? await aiService.optimizeProductImageBuffer(
+          req.file.buffer,
+          req.file.mimetype,
+        )
+      : req.file.buffer;
+
+    uploadedImage = await cloudinaryService.uploadImage(bufferToUpload, folder);
 
     const product = await sequelize.transaction(async (transaction) => {
       const stockType = req.body.stockType || PRODUCT_STOCK_TYPES.UNLIMITED;
@@ -120,6 +148,7 @@ const createProduct = async (req) => {
           imageUrl: uploadedImage.url,
           publicId: uploadedImage.publicId,
           isPrimary: true,
+          isOptimized,
           position: 0,
         },
         { transaction },
@@ -132,6 +161,7 @@ const createProduct = async (req) => {
             id: createdImage.id,
             imageUrl: createdImage.imageUrl,
             isPrimary: createdImage.isPrimary,
+            isOptimized: createdImage.isOptimized,
             position: createdImage.position,
           },
         ],
@@ -170,8 +200,31 @@ const updateProduct = async (req) => {
   let uploadedImage = null;
   let oldPublicId = null;
 
+  const isOptimized =
+    req.body.isOptimized === true || req.body.isOptimized === "true";
+
   try {
-    if (req.file) {
+    if (isOptimized) {
+      const existingImage = await ProductImage.findOne({
+        where: { productId: product.id },
+      });
+      if (!existingImage) {
+        throw AppError.fail("Product has no image to optimize.", 400);
+      }
+      if (existingImage.isOptimized) {
+        throw AppError.fail("This image is already optimized.", 400);
+      }
+
+      const original = await fetchRemoteImage(existingImage.imageUrl);
+      const optimizedBuffer = await aiService.optimizeProductImageBuffer(
+        original.buffer,
+        original.mimeType,
+      );
+      uploadedImage = await cloudinaryService.uploadImage(
+        optimizedBuffer,
+        folder,
+      );
+    } else if (req.file) {
       uploadedImage = await cloudinaryService.uploadImage(
         req.file.buffer,
         folder,
@@ -215,6 +268,7 @@ const updateProduct = async (req) => {
           {
             imageUrl: uploadedImage.url,
             publicId: uploadedImage.publicId,
+            isOptimized,
           },
           { where: { productId: product.id }, transaction },
         );
@@ -234,7 +288,7 @@ const updateProduct = async (req) => {
         {
           model: ProductImage,
           as: "images",
-          attributes: ["id", "imageUrl", "isPrimary", "position"],
+          attributes: ["id", "imageUrl", "isPrimary", "isOptimized", "position"],
         },
       ],
     });
