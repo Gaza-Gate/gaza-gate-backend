@@ -92,6 +92,7 @@ const localRegister = async (data, roleName, createProfile) => {
     throw err;
   }
 
+  console.log(otpCode);
   void sendVerificationEmail(user.email, otpCode).catch((emailError) => {
     console.error("Email sending failed:", emailError);
   });

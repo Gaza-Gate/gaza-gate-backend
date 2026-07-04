@@ -5,6 +5,7 @@ const Order = require("../models/order.model");
 const UserNotification = require("../models/userNotification.model");
 const PAGINATION = require("../constants/pagination.constant");
 const NOTIFICATION_TYPES = require("../constants/notificationTypes.constant");
+const AppError = require("../utils/AppError.util.js");
 
 const getNotificationStats = async (userId) => {
   const rows = await Notification.findAll({
@@ -41,14 +42,18 @@ const getNotificationStats = async (userId) => {
   };
 };
 
-const getNotifications = async (userId, query) => {
-  if (!userId)
-    throw AppError.fail("Seller authentication data is missing.", 401);
+const getNotifications = async (userId, query = {}) => {
+  if (!userId) throw AppError.fail("User authentication data is missing.", 401);
 
-  const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
+  const safeQuery = query || {};
+  const page = Math.max(Number(safeQuery.page) || PAGINATION.DEFAULT_PAGE, 1);
   const limit = PAGINATION.DEFAULT_LIMIT;
   const offset = (page - 1) * limit;
-  const type = query.type;
+  const rawType = safeQuery.type;
+  const normalizedType =
+    typeof rawType === "string" ? rawType.trim().toUpperCase() : "";
+  const allowedTypes = new Set(Object.values(NOTIFICATION_TYPES));
+  const type = allowedTypes.has(normalizedType) ? normalizedType : undefined;
 
   const notificationWhere = {};
   if (type) notificationWhere.type = type;
