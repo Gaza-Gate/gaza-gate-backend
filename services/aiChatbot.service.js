@@ -8,7 +8,7 @@ const KNOWLEDGE_BASE_PATH = path.join(__dirname, "..", "data", "knowledgeBase.md
 const getConfig = () => ({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: process.env.AI_BASE_URL || "https://openrouter.ai/api/v1",
-  model: process.env.AI_MODEL || "openai/gpt-4o-mini",
+  model: process.env.AI_MODEL || "poolside/laguna-xs-2.1:free",
 });
 
 const getClient = () => {

@@ -20,7 +20,7 @@ const UserNotification = require("./userNotification.model.js");
 const Review = require("./review.model.js");
 const Conversation = require("./conversation.model.js");
 const Message = require("./message.model.js");
-const UnansweredQuestion=require("./unansweredQuestion.model.js")
+const ChatbotRecord = require("./chatbotRecord.model.js");
 
 // ==================== AUTH ====================
 
@@ -404,27 +404,39 @@ Message.belongsTo(Product, {
 
 // ==================== CHATBOT ====================
 
-User.hasMany(UnansweredQuestion, {
+User.hasMany(ChatbotRecord, {
   foreignKey: { name: "userId", field: "user_id" },
-  as: "unansweredQuestions",
+  as: "chatbotRecords",
   onDelete: "CASCADE",
 });
-UnansweredQuestion.belongsTo(User, {
+ChatbotRecord.belongsTo(User, {
   foreignKey: { name: "userId", field: "user_id" },
   as: "user",
   onDelete: "CASCADE",
 });
 
-User.hasMany(UnansweredQuestion, {
+User.hasMany(ChatbotRecord, {
   foreignKey: { name: "reviewedBy", field: "reviewed_by" },
-  as: "reviewedQuestions",
+  as: "reviewedChatbotRecords",
   onDelete: "SET NULL",
 });
-UnansweredQuestion.belongsTo(User, {
+ChatbotRecord.belongsTo(User, {
   foreignKey: { name: "reviewedBy", field: "reviewed_by" },
   as: "reviewer",
   onDelete: "SET NULL",
 });
+
+ChatbotRecord.hasMany(ChatbotRecord, {
+  foreignKey: { name: "sessionId", field: "session_id" },
+  as: "messages",
+  onDelete: "CASCADE",
+});
+ChatbotRecord.belongsTo(ChatbotRecord, {
+  foreignKey: { name: "sessionId", field: "session_id" },
+  as: "session",
+  onDelete: "CASCADE",
+});
+
 module.exports = {
   User,
   Role,
@@ -448,5 +460,5 @@ module.exports = {
   Review,
   Conversation,
   Message,
-  UnansweredQuestion
+  ChatbotRecord,
 };

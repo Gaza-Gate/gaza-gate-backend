@@ -1,8 +1,9 @@
-const UnansweredQuestion = require("../models/unansweredQuestion.model.js");
+const ChatbotRecord = require("../models/chatbotRecord.model.js");
 const User = require("../models/user.model.js");
 const aiChatbotService = require("./aiChatbot.service.js");
 const {
   CHATBOT,
+  CHATBOT_RECORD_TYPES,
   UNANSWERED_QUESTION_STATUS,
 } = require("../constants/chatbot.constant.js");
 const PAGINATION = require("../constants/pagination.constant.js");
@@ -12,9 +13,10 @@ const getFallbackMessage = () =>
   CHATBOT.FALLBACK_MESSAGE.replace("{email}", CHATBOT.SUPPORT_EMAIL);
 
 const storeUnansweredQuestion = async (userId, question) => {
-  return UnansweredQuestion.create({
+  return ChatbotRecord.create({
     userId,
-    question: question.trim(),
+    recordType: CHATBOT_RECORD_TYPES.CUSTOMER_QUESTION,
+    content: question.trim(),
     status: UNANSWERED_QUESTION_STATUS.PENDING,
   });
 };
@@ -44,8 +46,6 @@ const askQuestion = async (userId, question) => {
     };
   }
 
-  // Either the AI could not answer from the knowledge base, or it was
-  // unavailable/errored. In all cases store the question for admin review.
   return buildFallbackResponse(userId, trimmedQuestion);
 };
 
@@ -54,7 +54,9 @@ const getUnansweredQuestions = async (query = {}) => {
   const limit = PAGINATION.DEFAULT_LIMIT;
   const offset = (page - 1) * limit;
 
-  const where = {};
+  const where = {
+    recordType: CHATBOT_RECORD_TYPES.CUSTOMER_QUESTION,
+  };
   if (
     query.status &&
     Object.values(UNANSWERED_QUESTION_STATUS).includes(query.status)
@@ -62,9 +64,9 @@ const getUnansweredQuestions = async (query = {}) => {
     where.status = query.status;
   }
 
-  const { count, rows } = await UnansweredQuestion.findAndCountAll({
+  const { count, rows } = await ChatbotRecord.findAndCountAll({
     where,
-    attributes: ["id", "question", "status", ["created_at", "createdAt"]],
+    attributes: ["id", "content", "status", ["created_at", "createdAt"]],
     include: [
       {
         model: User,
@@ -83,7 +85,7 @@ const getUnansweredQuestions = async (query = {}) => {
   return {
     questions: rows.map((row) => ({
       id: row.id,
-      question: row.question,
+      question: row.content,
       status: row.status,
       createdAt: row.dataValues.createdAt,
       customer: row.user
@@ -107,7 +109,12 @@ const getUnansweredQuestions = async (query = {}) => {
 };
 
 const markQuestionReviewed = async (questionId, adminUserId) => {
-  const question = await UnansweredQuestion.findByPk(questionId);
+  const question = await ChatbotRecord.findOne({
+    where: {
+      id: questionId,
+      recordType: CHATBOT_RECORD_TYPES.CUSTOMER_QUESTION,
+    },
+  });
   if (!question) {
     throw AppError.fail("Question not found", 404);
   }
@@ -124,8 +131,6 @@ const markQuestionReviewed = async (questionId, adminUserId) => {
 
   return question;
 };
-
-
 
 module.exports = {
   askQuestion,
