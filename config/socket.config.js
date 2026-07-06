@@ -3,6 +3,8 @@ const token = require("../utils/token.util.js");
 const User = require("../models/user.model.js");
 const UserStatus = require("../constants/userStatus.constant.js");
 
+const registerConversationHandlers = require("../socket/handlers/conversation.handler.js");
+
 let io = null;
 
 const initSocket = (httpServer) => {
@@ -35,6 +37,7 @@ const initSocket = (httpServer) => {
 
   io.on("connection", (socket) => {
     socket.join(`user:${socket.userId}`);
+    registerConversationHandlers(io, socket);
   });
 
   return io;

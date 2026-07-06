@@ -361,6 +361,19 @@ Conversation.belongsTo(User, {
   onUpdate: "CASCADE",
 });
 
+Conversation.belongsTo(Message, {
+  foreignKey: { name: "lastMessageId", field: "last_message_id" },
+  as: "lastMessage",
+  constraints: false,
+});
+
+Conversation.belongsTo(Product, {
+  foreignKey: { name: "activeProductId", field: "active_product_id" },
+  as: "activeProduct",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
 // ==================== MESSAGES ====================
 
 Conversation.hasMany(Message, {

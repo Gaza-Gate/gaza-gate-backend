@@ -28,9 +28,18 @@ const deleteAllNotifications = asyncWrapper(async (req, res) => {
   return apiResponse.sendSuccess(res, { data }, 200);
 });
 
+const deleteNotification = asyncWrapper(async (req, res) => {
+  const data = await notificationService.deleteNotification(
+    req.user.id,
+    req.params.notificationId,
+  );
+  return apiResponse.sendSuccess(res, { data }, 200);
+});
+
 module.exports = {
   getNotifications,
   markAsRead,
   markAllAsRead,
   deleteAllNotifications,
+  deleteNotification,
 };

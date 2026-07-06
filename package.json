@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon server.js"
+    "start": "nodemon server.js",
+    "test": "jest",
+    "test:conversation": "jest tests/integration/conversation.api.test.js"
   },
   "keywords": [],
   "author": "",
@@ -33,6 +35,8 @@
     "validator": "^13.15.35"
   },
   "devDependencies": {
-    "socket.io-client": "^4.8.3"
+    "jest": "^30.4.2",
+    "socket.io-client": "^4.8.3",
+    "supertest": "^7.2.2"
   }
 }

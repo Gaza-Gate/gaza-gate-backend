@@ -21,6 +21,7 @@ const cartRoute = require("./routes/cart.route.js");
 const aiRoute = require("./routes/ai.route.js");
 const customerChatbotRoute = require("./routes/customerChatbot.route.js");
 const sellerChatbotRoute = require("./routes/sellerChatbot.route.js");
+const conversationRoute = require("./routes/conversation.route.js");
 const apiResponse = require("./utils/apiResponse.util.js");
 const errorHandler = require("./middlewares/common/errorHandler.middleware.js");
 
@@ -54,6 +55,7 @@ app.use("/api/customer/cart", cartRoute);
 app.use("/api/seller/ai", aiRoute);
 app.use("/api/customer/chatbot", customerChatbotRoute);
 app.use("/api/seller/chatbot", sellerChatbotRoute);
+app.use("/api/conversations", conversationRoute);
 
 app.use((req, res, next) => {
   apiResponse.sendFail(res, { message: "Route not found!" }, 404);

@@ -286,6 +286,18 @@ const deleteAllNotifications = async (userId) => {
   return deletedCount;
 };
 
+const deleteNotification = async (userId, notificationId) => {
+  const deletedCount = await UserNotification.destroy({
+    where: { userId, notificationId },
+  });
+
+  if (!deletedCount) {
+    throw AppError.fail("Notification not found.", 404);
+  }
+
+  return { notificationId, deleted: true };
+};
+
 module.exports = {
   createNotification,
   notifySafely,
@@ -293,4 +305,5 @@ module.exports = {
   markAllAsRead,
   markAsRead,
   deleteAllNotifications,
+  deleteNotification,
 };

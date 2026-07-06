@@ -22,5 +22,10 @@ router.delete(
   authenticateAccessToken,
   notificationController.deleteAllNotifications,
 );
+router.delete(
+  "/:notificationId",
+  authenticateAccessToken,
+  notificationController.deleteNotification,
+);
 
 module.exports = router;
