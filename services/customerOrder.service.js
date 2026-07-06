@@ -88,10 +88,6 @@ const createOrder = async (req) => {
     ],
   });
 
-  console.log(cart);
-  console.log(cart.items);
-  console.log(cart.items.length);
-
   if (!cart || !cart.items?.length) {
     throw AppError.fail("Your cart is empty.", 400);
   }
