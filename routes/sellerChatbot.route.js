@@ -22,16 +22,6 @@ router.post(
   asyncWrapper(sellerChatbotController.chat),
 );
 
-router.post(
-  "/upload-product-image",
-  authenticateAccessToken,
-  allowedTo(userRoles.SELLER),
-  upload(1).single("productImage"),
-  filterBody(["sessionId"]),
-  sellerChatbotValidator.uploadImageValidator,
-  requestsValidator,
-  asyncWrapper(sellerChatbotController.uploadProductImage),
-);
 
 router.get(
   "/sessions",
