@@ -658,7 +658,18 @@ const sendMessage = async (userId, conversationId, { content, productId }) => {
     lastMessageAt: messagePayload.createdAt,
   });
 
-  if (!isUserInConversationRoom(io, conversationId, recipientId)) {
+  const recipientInConversationRoom = isUserInConversationRoom(
+    io,
+    conversationId,
+    recipientId,
+  );
+
+  if (!recipientInConversationRoom) {
+    // Fallback for clients that are connected but not joined to the conversation room.
+    emitToUser(recipientId, "new_message", {
+      message: messagePayload,
+    });
+
     const preview =
       trimmedContent.length > 100
         ? `${trimmedContent.slice(0, 100)}...`
