@@ -30,7 +30,7 @@ const Conversation = sequelize.define(
       },
     },
     sourceType: {
-      type: DataTypes.ENUM("product", "seller", "direct"),
+      type: DataTypes.ENUM("product", "seller", "direct", "order"),
       allowNull: false,
       defaultValue: "direct",
       field: "source_type",
@@ -55,6 +55,16 @@ const Conversation = sequelize.define(
       allowNull: true,
       field: "active_product_id",
     },
+    customerLastReadAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "customer_last_read_at",
+    },
+    sellerLastReadAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "seller_last_read_at",
+    },
   },
   {
     tableName: "conversations",
@@ -68,7 +78,7 @@ const Conversation = sequelize.define(
         fields: ["seller_id", "customer_id"],
       },
     ],
-  }
+  },
 );
 
 module.exports = Conversation;

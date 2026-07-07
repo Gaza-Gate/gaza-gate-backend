@@ -18,10 +18,10 @@ const Notification = sequelize.define(
     type: {
       type: DataTypes.ENUM(
         NOTIFICATION_TYPES.SYSTEM,
-        NOTIFICATION_TYPES.PROMOTIONAL,
+        NOTIFICATION_TYPES.REVIEW,
         NOTIFICATION_TYPES.ORDER,
-        NOTIFICATION_TYPES.ACCOUNT,
-        NOTIFICATION_TYPES.GENERAL
+        NOTIFICATION_TYPES.PRODUCT,
+        NOTIFICATION_TYPES.GENERAL,
       ),
       allowNull: false,
       defaultValue: NOTIFICATION_TYPES.GENERAL,
@@ -65,15 +65,18 @@ const Notification = sequelize.define(
     ],
     validate: {
       relatedOrderValidation() {
-        const hasOrderId = this.relatedOrderId && String(this.relatedOrderId).trim() !== "";
+        const hasOrderId =
+          this.relatedOrderId && String(this.relatedOrderId).trim() !== "";
         if (this.type === NOTIFICATION_TYPES.ORDER && !hasOrderId) {
           throw new Error("relatedOrderId is required for ORDER notifications");
         }
         if (this.type !== NOTIFICATION_TYPES.ORDER && hasOrderId) {
-          throw new Error("relatedOrderId is only allowed for ORDER notifications");
+          throw new Error(
+            "relatedOrderId is only allowed for ORDER notifications",
+          );
         }
-      }
-    }
+      },
+    },
   },
 );
 

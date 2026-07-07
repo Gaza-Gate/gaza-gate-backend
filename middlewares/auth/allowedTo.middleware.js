@@ -1,16 +1,15 @@
-const tokens = require("../utils/tokens.js");
+const AppError = require("../../utils/AppError.util.js");
 
-const allowedTo = (roles) => {
+const allowedTo = (...roles) => {
   return (req, res, next) => {
-    const user = req.user;
-    const userRole = user.role;
-
-    if (!user || !userRole) {
-      apiResponse.sendFail(res, { message: "Unauthorized" }, 401);
+    if (!req.user || !req.user.role) {
+      return next(AppError.fail("Unauthorized", 401));
     }
 
-    if (!roles.includes(userRole)) {
-      apiResponse.sendFail(res, { message: "Unauthorized" }, 401);
+    if (!roles.includes(req.user.role)) {
+      return next(
+        AppError.fail("You do not have permission to perform this action.", 403),
+      );
     }
 
     next();

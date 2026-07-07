@@ -22,7 +22,7 @@ const EmailVerification = sequelize.define(
     type: {
       type: DataTypes.ENUM(
         VERIFICATION_TYPES.EMAIL_ACTIVATE,
-        VERIFICATION_TYPES.PASSWORD_RESET
+        VERIFICATION_TYPES.PASSWORD_RESET,
       ),
       allowNull: false,
       defaultValue: VERIFICATION_TYPES.EMAIL_ACTIVATE,

@@ -144,6 +144,10 @@ router.post("/refresh-token", asyncWrapper(authController.refreshAccessToken));
 
 router.post("/logout", asyncWrapper(authController.logout));
 
-router.post("/logout-all", authenticateAccessToken, asyncWrapper(authController.logoutAll));
+router.post(
+  "/logout-all",
+  authenticateAccessToken,
+  asyncWrapper(authController.logoutAll),
+);
 
 module.exports = router;

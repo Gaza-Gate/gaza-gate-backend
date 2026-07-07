@@ -48,11 +48,8 @@ const Message = sequelize.define(
     createdAt: "created_at",
     updatedAt: "updated_at",
     underscored: true,
-    indexes: [
-      { fields: ["conversation_id"] },
-      { fields: ["sender_id"] },
-    ],
-  }
+    indexes: [{ fields: ["conversation_id"] }, { fields: ["sender_id"] }],
+  },
 );
 
 module.exports = Message;

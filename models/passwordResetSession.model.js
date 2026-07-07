@@ -31,10 +31,7 @@ const PasswordResetSession = sequelize.define(
     createdAt: "created_at",
     updatedAt: false,
     underscored: true,
-    indexes: [
-      { fields: ["user_id"] },
-      { fields: ["expires_at"] },
-    ],
+    indexes: [{ fields: ["user_id"] }, { fields: ["expires_at"] }],
   },
 );
 

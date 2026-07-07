@@ -1,8 +1,5 @@
 const { sequelize } = require("../config/db.config.js");
-const { 
-  Sequelize,
-  UniqueConstraintError
-} = require('sequelize');
+const { Sequelize, UniqueConstraintError } = require("sequelize");
 
 const {
   getEmailVerificationByUserIdAndCode,
@@ -25,7 +22,7 @@ const {
   REFRESH_TOKEN_EXPIRES_IN_MS,
   COOL_DOWN_PERIODS_IN_SECONDS,
   VERIFICATION_TYPES,
-  PASSWORD_RESET_SESSION_EXPIRES_IN_MS
+  PASSWORD_RESET_SESSION_EXPIRES_IN_MS,
 } = require("../constants/auth.constant.js");
 const userStatus = require("../constants/userStatus.constant.js");
 
@@ -33,24 +30,34 @@ const { hashPassword, comparePassword } = require("../utils/password.util.js");
 const token = require("../utils/token.util.js");
 const { hashToken } = require("../utils/cryptoHash.util.js");
 const AppError = require("../utils/AppError.util.js");
-const { 
+const {
   sendVerificationEmail,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
 } = require("../utils/email.util.js");
 
 const localRegister = async (data, roleName, createProfile) => {
   const { firstName, lastName, email, password } = data;
 
-  const result = await sequelize.transaction(async (transaction) => {
-    const role = await Role.findOne({ where: { name: roleName }, transaction });
-    if (!role) {
-      throw AppError.error(`${roleName} role not found`, 500);
-    }
+  const passwordHashPromise = hashPassword(password, 12);
+  const rolePromise = Role.findOne({
+    where: { name: roleName },
+    attributes: ["id"],
+  });
 
-    const hashedPassword = await hashPassword(password, 12);
-    
-    let user;
-    try {
+  const [hashedPassword, role] = await Promise.all([
+    passwordHashPromise,
+    rolePromise,
+  ]);
+
+  if (!role) {
+    throw AppError.error(`${roleName} role not found`, 500);
+  }
+
+  let user;
+  let otpCode;
+
+  try {
+    await sequelize.transaction(async (transaction) => {
       user = await User.create(
         {
           firstName,
@@ -63,40 +70,36 @@ const localRegister = async (data, roleName, createProfile) => {
         },
         { transaction },
       );
-    } catch (err) {
-      if (err instanceof UniqueConstraintError) {
-        throw AppError.fail("This email is already registered. Please login.",
-            409,
-        );
-      }
-      throw err;
+
+      await createProfile(user.id, transaction);
+
+      const verification = await createVerificationCode(
+        user.id,
+        VERIFICATION_TYPES.EMAIL_ACTIVATE,
+        transaction,
+      );
+
+      otpCode = verification.code;
+    });
+  } catch (err) {
+    if (err instanceof UniqueConstraintError) {
+      console.warn("Duplicate email registration attempt:", email);
+      return {
+        message:
+          "If the email address is not registered, a verification code will be sent to complete your registration.",
+      };
     }
-    
-    await createProfile(user.id, transaction);
-
-    const { code: otpCode } = await createVerificationCode(
-      user.id,
-      VERIFICATION_TYPES.EMAIL_ACTIVATE,
-      transaction,
-    );
-
-    return {
-      email: user.email,
-      otpCode,
-      message:
-        "Registration successful. Please check your email for the verification code.",
-    };
-  });
-
-  try {
-    await sendVerificationEmail(result.email, result.otpCode);
-  } catch (emailError) {
-    console.error("Email sending failed:", emailError);
+    throw err;
   }
 
+  console.log(otpCode);
+  void sendVerificationEmail(user.email, otpCode).catch((emailError) => {
+    console.error("Email sending failed:", emailError);
+  });
+
   return {
-    email: result.email,
-    message: result.message,
+    message:
+      "If the email address is not registered, a verification code will be sent to complete your registration.",
   };
 };
 
@@ -129,17 +132,16 @@ const verifyEmail = async ({ email, code }) => {
   return await sequelize.transaction(async (transaction) => {
     const user = await User.findOne({
       where: { email },
+      include: [{ model: Role, as: "role" }],
       transaction,
       lock: Sequelize.Transaction.LOCK.UPDATE,
     });
-    if (!user) {
-      throw AppError.fail("No account found with this email.", 404);
+
+    if (!user || user.isVerified) {
+      throw AppError.fail("Invalid or expired verification code.", 400);
     }
-    if (user.isVerified) {
-      throw AppError.fail(
-        "This account is already verified. Please login.",
-        400,
-      );
+    if (!user.role) {
+      throw AppError.error("User role not found.", 500);
     }
 
     const verification = await getEmailVerificationByUserIdAndCode(
@@ -148,124 +150,30 @@ const verifyEmail = async ({ email, code }) => {
       VERIFICATION_TYPES.EMAIL_ACTIVATE,
       transaction,
     );
+
     if (!verification) {
-      throw AppError.fail("Invalid verification code.", 400);
+      throw AppError.fail("Invalid or expired verification code.", 400);
     }
 
     if (verification.expiresAt < new Date()) {
       await deleteEmailVerificationByUserId(
         user.id,
         VERIFICATION_TYPES.EMAIL_ACTIVATE,
-        transaction
-        );
-      throw AppError.fail(
-        "Verification code has expired. Please request a new one.",
-        400,
-      );
-    }
-
-    await user.update(
-      {
-        isVerified: true,
-      },
-      {
         transaction,
-      },
-    );
-
-    await deleteEmailVerificationByUserId(
-      user.id,
-      VERIFICATION_TYPES.EMAIL_ACTIVATE,
-      transaction
-    );
-
-    const role = await Role.findByPk(user.roleId, { transaction });
-    if (!role) {
-      throw AppError.error("User role not found", 500);
-    }
-
-    const accessToken = token.signAccessToken({
-      userId: user.id,
-      role: role.name,
-    });
-    const refreshToken = token.signRefreshToken({
-      userId: user.id,
-      role: role.name,
-    });
-
-    const tokenHash = hashToken(refreshToken);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
-
-    await refreshTokenService.createRefreshToken(
-      {
-        userId: user.id,
-        tokenHash,
-        expiresAt,
-      },
-      transaction,
-    );
-
-    const safeUser = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: role.name,
-    };
-    return {
-      user: safeUser,
-      accessToken,
-      refreshToken,
-    };
-  });
-};
-
-const localLogin = async ({ email, password }, roleName) => {
-  const user = await User.unscoped().findOne({
-    where: { email },
-    include: [{ model: Role, as: "role" }],
-  });
-
-  const roleLabel = roleName === userRoles.SELLER ? "seller" : "customer";
-  
-  if (!user) {
-    throw AppError.fail(`No ${roleLabel} account found with this email.`, 404);
-  }
-  if (!user.role) {
-    throw AppError.error("User role not found.", 500);
-  }
-
-  const isAllowedRole =
-    user.role.name === roleName || user.role.name === userRoles.ADMIN;
-  if (!isAllowedRole) {
-    throw AppError.fail(`No ${roleLabel} account found with this email.`, 404);
-  }
-  
-  if (!user.password) {
-    const authProvider = await UserAuthProvider.findOne({
-      where: { userId: user.id },
-    });
-    if (authProvider) {
-      throw AppError.fail(
-        `This account uses ${authProvider.provider} login. Please sign in with ${authProvider.provider}.`,
-        400,
       );
+
+      throw AppError.fail("Invalid or expired verification code.", 400);
     }
-  }
 
-  const isPasswordValid = await comparePassword(password, user.password);
-  if (!isPasswordValid) {
-    throw AppError.fail("Invalid email or password.", 401);
-  }
+    await Promise.all([
+      user.update({ isVerified: true }, { transaction }),
+      deleteEmailVerificationByUserId(
+        user.id,
+        VERIFICATION_TYPES.EMAIL_ACTIVATE,
+        transaction,
+      ),
+    ]);
 
-  if (!user.isVerified) {
-    throw AppError.fail("Please verify your email before logging in.", 403);
-  }
-  if (user.status !== "active") {
-    throw AppError.fail("Your account has been suspended. Please contact support.", 403);
-  }
-
-  return await sequelize.transaction(async (transaction) => {
     const accessToken = token.signAccessToken({
       userId: user.id,
       role: user.role.name,
@@ -295,23 +203,96 @@ const localLogin = async ({ email, password }, roleName) => {
   });
 };
 
+const localLogin = async ({ email, password }, roleName) => {
+  const user = await User.unscoped().findOne({
+    where: { email },
+    include: [{ model: Role, as: "role" }],
+  });
 
+  const hashToCompare = user?.password || process.env.DUMMY_HASH;
+  const isPasswordValid = await comparePassword(password, hashToCompare);
+
+  const genericError = AppError.fail("Invalid email or password.", 401);
+
+  if (!user) throw genericError;
+  if (!user.role) throw AppError.error("User role not found.", 500);
+
+  const isAllowedRole =
+    user.role.name === roleName || user.role.name === userRoles.ADMIN;
+  if (!isAllowedRole) throw genericError;
+
+  if (!user.password) {
+    const authProvider = await UserAuthProvider.findOne({
+      where: { userId: user.id },
+    });
+    if (authProvider) {
+      throw AppError.fail(
+        `This account uses ${authProvider.provider} login. Please sign in with ${authProvider.provider}.`,
+        400,
+      );
+    }
+  }
+
+  if (!isPasswordValid) throw genericError;
+
+  if (!user.isVerified) {
+    throw AppError.fail("Please verify your email before logging in.", 403);
+  }
+  if (user.status !== "active") {
+    throw AppError.fail(
+      "Your account has been suspended. Please contact support.",
+      403,
+    );
+  }
+
+  const accessToken = token.signAccessToken({
+    userId: user.id,
+    role: user.role.name,
+  });
+  const refreshToken = token.signRefreshToken({
+    userId: user.id,
+    role: user.role.name,
+  });
+
+  const tokenHash = hashToken(refreshToken);
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+
+  await refreshTokenService.createRefreshToken({
+    userId: user.id,
+    tokenHash,
+    expiresAt,
+  });
+
+  const safeUser = {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    role: user.role.name,
+  };
+
+  return { user: safeUser, accessToken, refreshToken };
+};
 
 const resendVerificationCode = async ({ email }) => {
-  const result = await sequelize.transaction(async (transaction) => {
+  const genericMessage = {
+    message:
+      "If this email is registered and unverified, a verification code will be sent.",
+  };
+
+  const cooldownSeconds = COOL_DOWN_PERIODS_IN_SECONDS.EMAIL_VERIFICATION;
+
+  let result = null;
+
+  result = await sequelize.transaction(async (transaction) => {
     const user = await User.findOne({
       where: { email },
       transaction,
+      lock: transaction.LOCK.UPDATE,
     });
-    if (!user) {
-      throw AppError.fail("No account found with this email.", 404);
-    }
 
-    if (user.isVerified) {
-      throw AppError.fail(
-        "This account is already verified. Please login.",
-        400,
-      );
+    if (!user || user.isVerified) {
+      return { status: "not_eligible" };
     }
 
     const latestVerification = await getLatestEmailVerificationByUserId(
@@ -321,23 +302,25 @@ const resendVerificationCode = async ({ email }) => {
     );
 
     if (latestVerification) {
-      const timeDifferenceInSeconds = (Date.now() - new Date(latestVerification.created_at).getTime()) / 1000;
-      
-      if (
-        timeDifferenceInSeconds <
-        COOL_DOWN_PERIODS_IN_SECONDS.EMAIL_VERIFICATION
-      ) {
-        throw AppError.fail(
-          `You can only request a new verification code once every ${COOL_DOWN_PERIODS_IN_SECONDS.EMAIL_VERIFICATION} seconds. Please try again shortly.`,
-          429,
+      const timeDifferenceInSeconds =
+        (Date.now() - new Date(latestVerification.created_at).getTime()) / 1000;
+
+      if (timeDifferenceInSeconds < cooldownSeconds) {
+        const remainingSeconds = Math.ceil(
+          cooldownSeconds - timeDifferenceInSeconds,
         );
+
+        return {
+          status: "cooldown",
+          remainingSeconds,
+        };
       }
     }
 
     await deleteEmailVerificationByUserId(
       user.id,
       VERIFICATION_TYPES.EMAIL_ACTIVATE,
-      transaction
+      transaction,
     );
 
     const { code: otpCode } = await createVerificationCode(
@@ -347,16 +330,27 @@ const resendVerificationCode = async ({ email }) => {
     );
 
     return {
+      status: "sent",
       userId: user.id,
       email: user.email,
       otpCode,
     };
   });
-  
+
+  if (result.status === "not_eligible") {
+    return genericMessage;
+  }
+
+  if (result.status === "cooldown") {
+    throw AppError.fail(
+      `Please wait ${Math.ceil(result.remainingSeconds / 60)} minute(s) before requesting a new verification code.`,
+      429,
+    );
+  }
+
   try {
     await sendVerificationEmail(result.email, result.otpCode);
-  } 
-  catch (emailError) {
+  } catch (emailError) {
     console.error("Email sending failed:", emailError);
 
     await deleteEmailVerificationByUserId(
@@ -370,20 +364,25 @@ const resendVerificationCode = async ({ email }) => {
     );
   }
 
-  return {
-    message: "Verification code sent. Please check your email."
-  };
+  return genericMessage;
 };
 
 const forgotPassword = async ({ email }) => {
+  const genericMessage = {
+    message: "If this email exists, a code has been sent.",
+  };
+
+  const cooldownSeconds = COOL_DOWN_PERIODS_IN_SECONDS.PASSWORD_RESET;
+
   const result = await sequelize.transaction(async (transaction) => {
     const user = await User.findOne({
       where: { email },
       transaction,
-      lock: Sequelize.Transaction.LOCK.UPDATE,
+      lock: transaction.LOCK.UPDATE,
     });
-    if (!user || user.status !== "active") {
-      return null;
+
+    if (!user || user.status !== "active" || !user.isVerified) {
+      return { status: "not_eligible" };
     }
 
     const latestVerification = await getLatestEmailVerificationByUserId(
@@ -394,15 +393,17 @@ const forgotPassword = async ({ email }) => {
 
     if (latestVerification) {
       const timeDifferenceInSeconds =
-      (Date.now() - new Date(latestVerification.created_at).getTime()) / 1000;
+        (Date.now() - new Date(latestVerification.created_at).getTime()) / 1000;
 
-      if (
-        timeDifferenceInSeconds < COOL_DOWN_PERIODS_IN_SECONDS.PASSWORD_RESET
-      ) {
-        throw AppError.fail(
-          `You can only request a password reset once every ${COOL_DOWN_PERIODS_IN_SECONDS.PASSWORD_RESET} seconds. Please try again shortly.`,
-          429,
+      if (timeDifferenceInSeconds < cooldownSeconds) {
+        const remainingSeconds = Math.ceil(
+          cooldownSeconds - timeDifferenceInSeconds,
         );
+
+        return {
+          status: "cooldown",
+          remainingSeconds,
+        };
       }
     }
 
@@ -419,46 +420,61 @@ const forgotPassword = async ({ email }) => {
     );
 
     return {
+      status: "sent",
       userId: user.id,
       email: user.email,
       resetCode,
     };
   });
 
-  if (!result) {
-    return {
-      message: "If this email exists, a code has been sent.",
-    };
+  if (result.status === "not_eligible") {
+    return genericMessage;
+  }
+
+  if (result.status === "cooldown") {
+    throw AppError.fail(
+      `Please wait ${Math.ceil(result.remainingSeconds / 60)} minute(s) before requesting a new password reset code.`,
+      429,
+    );
   }
 
   try {
     await sendPasswordResetEmail(result.email, result.resetCode);
   } catch (emailError) {
+    console.error("Password reset email sending failed:", emailError);
+
     await deleteEmailVerificationByUserId(
       result.userId,
       VERIFICATION_TYPES.PASSWORD_RESET,
     );
-    
+
     throw AppError.error(
       "Failed to send password reset email. Please try again later.",
       500,
-      );
+    );
   }
 
-  return {
-    message: "If this email exists, a code has been sent.",
-  };
+  return genericMessage;
 };
 
 const verifyResetCode = async ({ email, code }) => {
-  return await sequelize.transaction(async (transaction) => {
+  const genericError = AppError.fail(
+    "Invalid email or verification code.",
+    400,
+  );
+
+  let sessionId = null;
+  let userId = null;
+
+  await sequelize.transaction(async (transaction) => {
     const user = await User.findOne({
       where: { email },
       transaction,
-      lock: Sequelize.Transaction.LOCK.UPDATE,
+      lock: transaction.LOCK.UPDATE,
     });
-    if (!user || user.status !== "active") {
-      throw AppError.fail("Invalid email or verification code.", 400);
+
+    if (!user || user.status !== "active" || !user.isVerified) {
+      throw genericError;
     }
 
     const verification = await getEmailVerificationByUserIdAndCode(
@@ -467,49 +483,47 @@ const verifyResetCode = async ({ email, code }) => {
       VERIFICATION_TYPES.PASSWORD_RESET,
       transaction,
     );
-    if (!verification) {
-      throw AppError.fail("Invalid email or verification code.", 400);
-    }
+
+    if (!verification) throw genericError;
+
     if (new Date(verification.expiresAt) < new Date()) {
       await deleteEmailVerificationByUserId(
         user.id,
         VERIFICATION_TYPES.PASSWORD_RESET,
         transaction,
       );
-      throw AppError.fail(
-        "Verification code has expired. Please request a new one.",
-        400,
-      );
+
+      throw genericError;
     }
-    
+
     await deleteEmailVerificationByUserId(
       user.id,
       VERIFICATION_TYPES.PASSWORD_RESET,
       transaction,
     );
-    
+
     const passwordResetSession = await PasswordResetSession.create(
       {
         userId: user.id,
-        expiresAt: new Date(Date.now() + PASSWORD_RESET_SESSION_EXPIRES_IN_MS
-        ),
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_SESSION_EXPIRES_IN_MS),
       },
-      { transaction }
+      { transaction },
     );
-    
-    const resetToken = token.signPendingToken({
-      sessionId: passwordResetSession.id,
-      userId: user.id,
-      purpose: VERIFICATION_TYPES.PASSWORD_RESET,
-    });
-
-    return {
-      message: "Code verified successfully. You can now reset your password.",
-      resetToken,
-    };
+    sessionId = passwordResetSession.id;
+    userId = user.id;
   });
-};
 
+  const resetToken = token.signPendingToken({
+    sessionId,
+    userId,
+    purpose: VERIFICATION_TYPES.PASSWORD_RESET,
+  });
+
+  return {
+    message: "Code verified successfully. You can now reset your password.",
+    resetToken,
+  };
+};
 const resetPassword = async ({ resetToken, newPassword, confirmPassword }) => {
   if (newPassword !== confirmPassword) {
     throw AppError.fail(
@@ -527,111 +541,109 @@ const resetPassword = async ({ resetToken, newPassword, confirmPassword }) => {
       400,
     );
   }
-  
+
   if (decoded.purpose !== VERIFICATION_TYPES.PASSWORD_RESET) {
-    throw AppError.fail("Invalid token purpose.", 400);
+    throw AppError.fail(
+      "Invalid or expired reset token. Please request a new password reset.",
+      400,
+    );
   }
-  
-  return await sequelize.transaction(async (transaction) => {
-    const user = await User.findByPk(decoded.userId, {
-      transaction,
-      lock: Sequelize.Transaction.LOCK.UPDATE,
-    });
 
-    if (!user || user.status !== "active") {
-      throw AppError.fail(
-        "User account is invalid, suspended, or does not exist.",
-        400,
-      );
-    }
-    
-    const resetSession =
-    await PasswordResetSession.findByPk(
-      decoded.sessionId,
-      {
+  const hashedPassword = await hashPassword(newPassword);
+
+  const genericError = AppError.fail(
+    "Invalid or expired reset token. Please request a new password reset.",
+    400,
+  );
+
+  await sequelize.transaction(async (transaction) => {
+    const [user, resetSession] = await Promise.all([
+      User.findByPk(decoded.userId, {
         transaction,
-        lock: Sequelize.Transaction.LOCK.UPDATE,
-      }
-    );
-    if (!resetSession) {
-      throw AppError.fail("Invalid or expired reset session.",
-        400,
-      );
-    }
-    if (resetSession.userId !== decoded.userId) {
-      throw AppError.fail("Invalid reset session.", 400);
-    }
-    if (resetSession.expiresAt < new Date()) {
-      throw AppError.fail(
-        "Reset session has expired.",
-        400,
-        );
-    }
-    if (resetSession.usedAt) {
-      throw AppError.fail(
-        "This reset session has already been used.",
-        400,
-        );
+        lock: transaction.LOCK.UPDATE,
+      }),
+      PasswordResetSession.findByPk(decoded.sessionId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      }),
+    ]);
+
+    if (!user || user.status !== "active" || !user.isVerified) {
+      throw genericError;
     }
 
-    const hashedPassword = await hashPassword(newPassword);
-    await user.update(
-      {
-        password: hashedPassword,
-        passwordChangedAt: new Date(),
-      },
-      { transaction },
-    );
-    
-    await resetSession.update(
-      {
-        usedAt: new Date(),
-      },
-      { transaction },
-    );
-    
-    await RefreshToken.destroy({
-      where: {
-        userId: user.id,
-      },
-      transaction,
-    });
-    
-    return {
-      message:
-        "Password has been reset successfully. You can now log in with your new password.",
-    };
+    if (
+      !resetSession ||
+      resetSession.userId !== decoded.userId ||
+      resetSession.expiresAt < new Date() ||
+      resetSession.usedAt
+    ) {
+      throw genericError;
+    }
+
+    await Promise.all([
+      user.update(
+        { password: hashedPassword, passwordChangedAt: new Date() },
+        { transaction },
+      ),
+      resetSession.update({ usedAt: new Date() }, { transaction }),
+      RefreshToken.destroy({
+        where: { userId: user.id },
+        transaction,
+      }),
+    ]);
   });
+
+  return {
+    message:
+      "Password has been reset successfully. You can now log in with your new password.",
+  };
 };
 
 const customerGoogleRegister = async (payload) => {
-  const result = await sequelize.transaction(async (transaction) => {
+  const customerRole = await Role.findOne({
+    where: { name: userRoles.CUSTOMER },
+  });
+  if (!customerRole) {
+    throw AppError.error("Customer role not found.", 500);
+  }
+
+  const nameParts = (payload.name || "").trim().split(/\s+/);
+  const firstName = payload.given_name || nameParts[0] || "Mohammad";
+  const lastName =
+    payload.family_name || nameParts.slice(1).join(" ") || "Mohammad";
+
+  const userId = require("crypto").randomUUID();
+
+  const accessToken = token.signAccessToken({
+    userId,
+    role: customerRole.name,
+  });
+  const refreshToken = token.signRefreshToken({
+    userId,
+    role: customerRole.name,
+  });
+
+  const tokenHash = hashToken(refreshToken);
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+
+  await sequelize.transaction(async (transaction) => {
     const existingUser = await User.findOne({
       where: { email: payload.email },
-      transaction
+      transaction,
+      lock: transaction.LOCK.UPDATE,
     });
+
     if (existingUser) {
       throw AppError.fail(
-        "This email is already registered. Please login.",
+        "An account with this email already exists. Please login.",
         409,
       );
     }
 
-    const customerRole = await Role.findOne({
-      where: { name: userRoles.CUSTOMER },
-      transaction,
-    });
-    if (!customerRole) {
-      throw AppError.error("Customer role not found", 500);
-    }
-
-    const nameParts = (payload.name || "").trim().split(/\s+/);
-    const firstName = payload.given_name || nameParts[0] || "Mohammad";
-    const lastName =
-      payload.family_name || nameParts.slice(1).join(" ") || "Mohammad";
-
-    const user = await User.create(
+    await User.create(
       {
+        id: userId,
         firstName,
         lastName,
         email: payload.email,
@@ -644,137 +656,154 @@ const customerGoogleRegister = async (payload) => {
       { transaction },
     );
 
-    await UserAuthProvider.create(
-      {
-        userId: user.id,
-        provider: "google",
-        providerId: payload.sub,
-      },
-      { transaction },
-    );
-
-    await Customer.create({ userId: user.id }, { transaction });
-    
-    const accessToken = token.signAccessToken({
-      userId: user.id,
-      role: customerRole.name,
-    });
-    const refreshToken = token.signRefreshToken({
-      userId: user.id,
-      role: customerRole.name,
-    });
-
-    const tokenHash = hashToken(refreshToken);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
-
-    await refreshTokenService.createRefreshToken(
-      { userId: user.id, tokenHash, expiresAt },
-      transaction,
-    );
-    
-    const safeUser = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: customerRole.name
-    };
-    return {
-      user: safeUser,
-      accessToken,
-      refreshToken
-    };
+    await Promise.all([
+      UserAuthProvider.create(
+        {
+          userId,
+          provider: "google",
+          providerId: payload.sub,
+        },
+        { transaction },
+      ),
+      Customer.create({ userId }, { transaction }),
+      refreshTokenService.createRefreshToken(
+        { userId, tokenHash, expiresAt },
+        transaction,
+      ),
+    ]);
   });
 
-  return result;
+  const safeUser = {
+    id: userId,
+    firstName,
+    lastName,
+    email: payload.email,
+    role: customerRole.name,
+  };
+
+  return { user: safeUser, accessToken, refreshToken };
 };
 
 const customerGoogleLogin = async (payload) => {
-  return await sequelize.transaction(async (transaction) => {
-    const authProvider = await UserAuthProvider.findOne({
-      where: {
-        provider: "google",
-        providerId: payload.sub,
+  const authProvider = await UserAuthProvider.findOne({
+    where: {
+      provider: "google",
+      providerId: payload.sub,
+    },
+    include: [
+      {
+        model: User,
+        as: "user",
+        include: [{ model: Role, as: "role" }],
       },
-      include: [{ model: User, as: "user" }],
-      transaction,
-    });
-    if (!authProvider) {
-      throw AppError.fail("No account found. Please register first.", 404);
-    }
+    ],
+  });
 
-    const user = authProvider.user;
+  if (!authProvider) {
+    throw AppError.fail("No account found. Please register first.", 404);
+  }
 
-    const role = await Role.findByPk(user.roleId, { transaction });
-    if (!role) {
-      throw AppError.error("User role not found", 500);
-    }
-    if (role.name !== userRoles.CUSTOMER) {
-      throw AppError.fail(
-        "This account is registered as a Seller. Please login from the Seller page.",
-        403,
-      );
-    }
+  const user = authProvider.user;
+  const role = user.role;
 
-    if (user.status === userStatus.BANNED) {
-      throw AppError.fail("Your account has been banned.", 403);
-    }
+  if (!role) {
+    throw AppError.error("User role not found.", 500);
+  }
+  if (role.name !== userRoles.CUSTOMER) {
+    throw AppError.fail(
+      "This account is registered as a Seller. Please login from the Seller page.",
+      403,
+    );
+  }
+  if (!user.isVerified) {
+    throw AppError.fail("Your account is not verified.", 403);
+  }
+  if (user.status === userStatus.BANNED) {
+    throw AppError.fail("Your account has been banned.", 403);
+  }
+
+  const accessToken = token.signAccessToken({
+    userId: user.id,
+    role: role.name,
+  });
+  const refreshToken = token.signRefreshToken({
+    userId: user.id,
+    role: role.name,
+  });
+
+  const tokenHash = hashToken(refreshToken);
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+
+  await sequelize.transaction(async (transaction) => {
+    const writes = [
+      refreshTokenService.createRefreshToken(
+        { userId: user.id, tokenHash, expiresAt },
+        transaction,
+      ),
+    ];
 
     if (payload.picture && user.avatar !== payload.picture) {
-      await user.update({ avatar: payload.picture }, { transaction });
+      writes.push(user.update({ avatar: payload.picture }, { transaction }));
     }
 
-    const accessToken = token.signAccessToken({
-      userId: user.id,
-      role: role.name,
-    });
-    const refreshToken = token.signRefreshToken({
-      userId: user.id,
-      role: role.name,
-    });
-
-    const tokenHash = hashToken(refreshToken);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
-
-    await refreshTokenService.createRefreshToken(
-      { userId: user.id, tokenHash, expiresAt },
-      transaction,
-    );
-
-    const safeUser = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: role.name
-    };
-    return { 
-      user: safeUser,
-      accessToken,
-      refreshToken
-    };
+    await Promise.all(writes);
   });
+
+  const safeUser = {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    role: role.name,
+  };
+
+  return { user: safeUser, accessToken, refreshToken };
 };
 
 const sellerGoogleRegisterInit = async (payload) => {
   const existingUser = await User.findOne({
     where: { email: payload.email },
+    include: [{ model: Role, as: "role" }],
   });
+
   if (existingUser) {
+    const roleName = existingUser.role?.name;
+
+    if (roleName === userRoles.SELLER) {
+      throw AppError.fail(
+        "This email is already registered as a Seller. Please login.",
+        409,
+      );
+    }
+
+    if (roleName === userRoles.CUSTOMER) {
+      throw AppError.fail(
+        "This email is already registered as a Customer. Please login from the Customer page.",
+        409,
+      );
+    }
+
     throw AppError.fail("This email is already registered. Please login.", 409);
   }
+
+  const nameParts = (payload.name || "").trim().split(/\s+/);
+  const firstName = payload.given_name || nameParts[0] || "Mohammad";
+  const lastName =
+    payload.family_name || nameParts.slice(1).join(" ") || "Mohammad";
 
   const pendingToken = token.signPendingToken({
     type: "pending_seller",
     googleSub: payload.sub,
     email: payload.email,
-    firstName: payload.given_name || "Mohammad",
-    lastName: payload.family_name || "Mohammad",
+    firstName,
+    lastName,
     avatar: payload.picture || null,
   });
 
   return { pendingToken };
 };
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
 
 const sellerGoogleRegisterComplete = async (data) => {
   const {
@@ -812,10 +841,32 @@ const sellerGoogleRegisterComplete = async (data) => {
   const finalLastName =
     lastName && lastName.trim() ? lastName.trim() : decoded.lastName;
 
-  const result = await sequelize.transaction(async (transaction) => {
+  const sellerRole = await Role.findOne({
+    where: { name: userRoles.SELLER },
+  });
+  if (!sellerRole) {
+    throw AppError.error("Seller role not found.", 500);
+  }
+
+  const userId = require("crypto").randomUUID();
+
+  const accessToken = token.signAccessToken({
+    userId,
+    role: sellerRole.name,
+  });
+  const refreshToken = token.signRefreshToken({
+    userId,
+    role: sellerRole.name,
+  });
+
+  const tokenHash = hashToken(refreshToken);
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+
+  await sequelize.transaction(async (transaction) => {
     const existingUser = await User.findOne({
       where: { email: decoded.email },
       transaction,
+      lock: transaction.LOCK.UPDATE,
     });
     if (existingUser) {
       throw AppError.fail(
@@ -824,16 +875,9 @@ const sellerGoogleRegisterComplete = async (data) => {
       );
     }
 
-    const sellerRole = await Role.findOne({
-      where: { name: userRoles.SELLER },
-      transaction,
-    });
-    if (!sellerRole) {
-      throw AppError.error("Seller role not found", 500);
-    }
-
-    const user = await User.create(
+    await User.create(
       {
+        id: userId,
         firstName: finalFirstName,
         lastName: finalLastName,
         email: decoded.email,
@@ -846,119 +890,118 @@ const sellerGoogleRegisterComplete = async (data) => {
       { transaction },
     );
 
-    await UserAuthProvider.create(
-      {
-        userId: user.id,
-        provider: "google",
-        providerId: decoded.googleSub,
-      },
-      { transaction },
-    );
-
-    await Seller.create(
-      {
-        userId: user.id,
-        storeName,
-        storeDescription,
-      },
-      { transaction },
-    );
-    
-    const accessToken = token.signAccessToken({
-      userId: user.id,
-      role: sellerRole.name,
-    });
-    const refreshToken = token.signRefreshToken({
-      userId: user.id,
-      role: sellerRole.name,
-    });
-
-    const tokenHash = hashToken(refreshToken);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
-
-    await refreshTokenService.createRefreshToken(
-      { userId: user.id, tokenHash, expiresAt },
-      transaction,
-    );
-    
-    const safeUser = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: sellerRole.name
-    };
-    return { 
-      user: safeUser, 
-      accessToken,
-      refreshToken
-    };
+    await Promise.all([
+      UserAuthProvider.create(
+        {
+          userId,
+          provider: "google",
+          providerId: decoded.googleSub,
+        },
+        { transaction },
+      ),
+      Seller.create(
+        {
+          userId,
+          storeName,
+          storeDescription,
+        },
+        { transaction },
+      ),
+      refreshTokenService.createRefreshToken(
+        { userId, tokenHash, expiresAt },
+        transaction,
+      ),
+    ]);
   });
 
-  return result;
+  const safeUser = {
+    id: userId,
+    firstName: finalFirstName,
+    lastName: finalLastName,
+    email: decoded.email,
+    role: sellerRole.name,
+  };
+
+  return { user: safeUser, accessToken, refreshToken };
 };
 
 const sellerGoogleLogin = async (payload) => {
-  return await sequelize.transaction(async (transaction) => {
-    const authProvider = await UserAuthProvider.findOne({
-      where: {
-        provider: "google",
-        providerId: payload.sub,
+  const authProvider = await UserAuthProvider.findOne({
+    where: {
+      provider: "google",
+      providerId: payload.sub,
+    },
+    include: [
+      {
+        model: User,
+        as: "user",
+        include: [{ model: Role, as: "role" }],
       },
-      include: [{ model: User, as: "user" }],
-      transaction,
-    });
-    if (!authProvider) {
-      throw AppError.fail("No account found. Please register first.", 404);
-    }
+    ],
+  });
 
-    const user = authProvider.user;
+  if (!authProvider) {
+    throw AppError.fail("No account found. Please register first.", 404);
+  }
 
-    const role = await Role.findByPk(user.roleId, { transaction });
-    if (!role) {
-      throw AppError.error("User role not found", 500);
-    }
-    if (role.name !== userRoles.SELLER) {
-      throw AppError.fail(
-        "This account is registered as a Customer. Please login from the Customer page.",
-        403,
-      );
-    }
+  const user = authProvider.user;
+  const role = user.role;
 
-    if (user.status === userStatus.BANNED) {
-      throw AppError.fail("Your account has been banned.", 403);
-    }
+  if (!role) {
+    throw AppError.error("User role not found.", 500);
+  }
+
+  if (role.name !== userRoles.SELLER) {
+    throw AppError.fail(
+      "This account is registered as a Customer. Please login from the Customer page.",
+      403,
+    );
+  }
+
+  if (!user.isVerified) {
+    throw AppError.fail("Your account is not verified.", 403);
+  }
+
+  if (user.status === userStatus.BANNED) {
+    throw AppError.fail("Your account has been banned.", 403);
+  }
+
+  const accessToken = token.signAccessToken({
+    userId: user.id,
+    role: role.name,
+  });
+  const refreshToken = token.signRefreshToken({
+    userId: user.id,
+    role: role.name,
+  });
+
+  const tokenHash = hashToken(refreshToken);
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+
+  await sequelize.transaction(async (transaction) => {
+    const writes = [
+      refreshTokenService.createRefreshToken(
+        { userId: user.id, tokenHash, expiresAt },
+        transaction,
+      ),
+    ];
 
     if (payload.picture && user.avatar !== payload.picture) {
-      await user.update({ avatar: payload.picture }, { transaction });
+      writes.push(user.update({ avatar: payload.picture }, { transaction }));
     }
 
-    const accessToken = token.signAccessToken({
-      userId: user.id,
-      role: role.name,
-    });
-    const refreshToken = token.signRefreshToken({
-      userId: user.id,
-      role: role.name,
-    });
-
-    const tokenHash = hashToken(refreshToken);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
-
-    await refreshTokenService.createRefreshToken(
-      { userId: user.id, tokenHash, expiresAt },
-      transaction,
-    );
-
-    const safeUser = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: role.name
-    };
-    return { user: safeUser, accessToken, refreshToken };
+    await Promise.all(writes);
   });
+
+  const safeUser = {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    role: role.name,
+  };
+
+  return { user: safeUser, accessToken, refreshToken };
 };
 
 const saveRefreshToken = async (userId, refreshToken, transaction = null) => {
@@ -970,7 +1013,7 @@ const saveRefreshToken = async (userId, refreshToken, transaction = null) => {
       tokenHash,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS),
     },
-    { transaction }
+    { transaction },
   );
 };
 
@@ -996,23 +1039,28 @@ const refreshAccessToken = async (oldRefreshToken) => {
     });
 
     if (!storedToken) throw AppError.fail("Invalid refresh token", 401);
-    if (storedToken.expiresAt < new Date()) throw AppError.fail("Refresh token expired", 401);
-    if (storedToken.revokedAt) throw AppError.fail("Refresh token revoked", 401);
+    if (storedToken.expiresAt < new Date())
+      throw AppError.fail("Refresh token expired", 401);
+    if (storedToken.revokedAt)
+      throw AppError.fail("Refresh token revoked", 401);
 
     const user = await User.findByPk(payload.userId, { transaction: t });
     if (!user) throw AppError.fail("User not found", 404);
-    
+
     if (user.status === userStatus.BANNED) {
       throw AppError.fail("Your account has been banned.", 403);
     }
 
     const role = await Role.findByPk(user.roleId, { transaction: t });
     if (!role) throw AppError.fail("User role not found", 404);
-    
+
     storedToken.revokedAt = new Date();
     await storedToken.save({ transaction: t });
 
-    const newRefreshToken = token.signRefreshToken({ userId: user.id, role: role.name });
+    const newRefreshToken = token.signRefreshToken({
+      userId: user.id,
+      role: role.name,
+    });
     await RefreshToken.create(
       {
         userId: user.id,
@@ -1022,7 +1070,10 @@ const refreshAccessToken = async (oldRefreshToken) => {
       { transaction: t },
     );
 
-    const newAccessToken = token.signAccessToken({ userId: user.id, role: role.name });
+    const newAccessToken = token.signAccessToken({
+      userId: user.id,
+      role: role.name,
+    });
 
     return { accessToken: newAccessToken, refreshToken: newRefreshToken };
   });
@@ -1043,7 +1094,6 @@ const logoutAll = async (userId) => {
   });
 };
 
-
 module.exports = {
   customerLocalRegister,
   sellerLocalRegister,
@@ -1059,8 +1109,8 @@ module.exports = {
   sellerGoogleRegisterInit,
   sellerGoogleRegisterComplete,
   sellerGoogleLogin,
-  
+
   refreshAccessToken,
   logout,
-  logoutAll
+  logoutAll,
 };
