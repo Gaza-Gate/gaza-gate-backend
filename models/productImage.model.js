@@ -15,15 +15,26 @@ const ProductImage = sequelize.define(
       field: "product_id",
     },
     imageUrl: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.STRING(512),
       allowNull: false,
       field: "image_url",
+    },
+    publicId: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      field: "public_id",
     },
     isPrimary: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
       field: "is_primary",
+    },
+    isOptimized: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      field: "is_optimized",
     },
     position: {
       type: DataTypes.INTEGER,

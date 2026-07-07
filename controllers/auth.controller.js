@@ -109,14 +109,22 @@ const customerGoogleRegister = async (req, res) => {
   const result = await authService.customerGoogleRegister(req.googlePayload);
   res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
 
-  return apiResponse.sendSuccess(res, { accessToken: result.accessToken, user: result.user }, 201);
+  return apiResponse.sendSuccess(
+    res,
+    { accessToken: result.accessToken, user: result.user },
+    201,
+  );
 };
 
 const customerGoogleLogin = async (req, res) => {
   const result = await authService.customerGoogleLogin(req.googlePayload);
   res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
 
-  return apiResponse.sendSuccess(res, { accessToken: result.accessToken, user: result.user }, 200);
+  return apiResponse.sendSuccess(
+    res,
+    { accessToken: result.accessToken, user: result.user },
+    200,
+  );
 };
 
 const sellerGoogleRegisterInit = async (req, res) => {
@@ -132,15 +140,23 @@ const sellerGoogleRegisterInit = async (req, res) => {
 const sellerGoogleRegisterComplete = async (req, res) => {
   const result = await authService.sellerGoogleRegisterComplete(req.body);
   res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
-  
-  return apiResponse.sendSuccess(res, { accessToken: result.accessToken, user: result.user }, 201);
+
+  return apiResponse.sendSuccess(
+    res,
+    { accessToken: result.accessToken, user: result.user },
+    201,
+  );
 };
 
 const sellerGoogleLogin = async (req, res) => {
   const result = await authService.sellerGoogleLogin(req.googlePayload);
   res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
 
-  return apiResponse.sendSuccess(res, { accessToken: result.accessToken, user: result.user }, 200);
+  return apiResponse.sendSuccess(
+    res,
+    { accessToken: result.accessToken, user: result.user },
+    200,
+  );
 };
 
 const refreshAccessToken = async (req, res) => {
@@ -163,15 +179,23 @@ const logout = async (req, res) => {
 
   await authService.logout(refreshToken);
   res.clearCookie("refreshToken", refreshTokenCookieOptions);
-  
-  return apiResponse.sendSuccess(res, { message: "Logged out successfully" }, 200);
+
+  return apiResponse.sendSuccess(
+    res,
+    { message: "Logged out successfully" },
+    200,
+  );
 };
 
 const logoutAll = async (req, res) => {
   await authService.logoutAll(req.user.id);
   res.clearCookie("refreshToken", refreshTokenCookieOptions);
-  
-  return apiResponse.sendSuccess(res, { message: "Logged out from all devices successfully" }, 200);
+
+  return apiResponse.sendSuccess(
+    res,
+    { message: "Logged out from all devices successfully" },
+    200,
+  );
 };
 
 module.exports = {
@@ -190,8 +214,8 @@ module.exports = {
   sellerGoogleRegisterInit,
   sellerGoogleRegisterComplete,
   sellerGoogleLogin,
-  
+
   refreshAccessToken,
   logout,
-  logoutAll
+  logoutAll,
 };

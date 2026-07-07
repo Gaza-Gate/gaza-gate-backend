@@ -9,25 +9,25 @@ const authenticateAccessToken = async (req, res, next) => {
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       throw AppError.fail("Access token is required", 401);
     }
-    
+
     const accessToken = authHeader.split(" ")[1];
-    
+
     let payload;
     try {
       payload = token.verifyAccessToken(accessToken);
     } catch (error) {
       throw AppError.fail("Invalid or expired access token", 401);
     }
-    
+
     const user = await User.findByPk(payload.userId);
     if (!user) {
       throw AppError.fail("User not found", 401);
     }
-    
+
     if (user.status === UserStatus.BANNED) {
       throw AppError.fail("Your account has been banned.", 403);
     }
-    
+
     req.user = {
       id: user.id,
       role: payload.role,

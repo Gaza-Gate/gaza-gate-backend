@@ -20,6 +20,7 @@ const UserNotification = require("./userNotification.model.js");
 const Review = require("./review.model.js");
 const Conversation = require("./conversation.model.js");
 const Message = require("./message.model.js");
+const ChatbotRecord = require("./chatbotRecord.model.js");
 
 // ==================== AUTH ====================
 
@@ -323,6 +324,17 @@ Review.belongsTo(Order, {
   onUpdate: "CASCADE",
 });
 
+Seller.hasMany(Review, {
+  foreignKey: { name: "sellerId", field: "seller_id" },
+  as: "reviews",
+});
+Review.belongsTo(Seller, {
+  foreignKey: { name: "sellerId", field: "seller_id" },
+  as: "seller",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
 // ==================== CONVERSATIONS ====================
 
 User.hasMany(Conversation, {
@@ -346,6 +358,19 @@ Conversation.belongsTo(User, {
   foreignKey: { name: "customerId", field: "customer_id" },
   as: "customer",
   onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+
+Conversation.belongsTo(Message, {
+  foreignKey: { name: "lastMessageId", field: "last_message_id" },
+  as: "lastMessage",
+  constraints: false,
+});
+
+Conversation.belongsTo(Product, {
+  foreignKey: { name: "activeProductId", field: "active_product_id" },
+  as: "activeProduct",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 
@@ -390,14 +415,63 @@ Message.belongsTo(Product, {
   onUpdate: "CASCADE",
 });
 
+// ==================== CHATBOT ====================
+
+User.hasMany(ChatbotRecord, {
+  foreignKey: { name: "userId", field: "user_id" },
+  as: "chatbotRecords",
+  onDelete: "CASCADE",
+});
+ChatbotRecord.belongsTo(User, {
+  foreignKey: { name: "userId", field: "user_id" },
+  as: "user",
+  onDelete: "CASCADE",
+});
+
+User.hasMany(ChatbotRecord, {
+  foreignKey: { name: "reviewedBy", field: "reviewed_by" },
+  as: "reviewedChatbotRecords",
+  onDelete: "SET NULL",
+});
+ChatbotRecord.belongsTo(User, {
+  foreignKey: { name: "reviewedBy", field: "reviewed_by" },
+  as: "reviewer",
+  onDelete: "SET NULL",
+});
+
+ChatbotRecord.hasMany(ChatbotRecord, {
+  foreignKey: { name: "sessionId", field: "session_id" },
+  as: "messages",
+  onDelete: "CASCADE",
+});
+ChatbotRecord.belongsTo(ChatbotRecord, {
+  foreignKey: { name: "sessionId", field: "session_id" },
+  as: "session",
+  onDelete: "CASCADE",
+});
+
 module.exports = {
-  User, Role, Address,
-  Customer, Seller,
-  RefreshToken, UserAuthProvider, PasswordResetSession, EmailVerification,
-  Category, Product, ProductImage,
-  Wishlist, Cart, CartItem,
-  Order, OrderItem,
-  Notification, UserNotification,
+  User,
+  Role,
+  Address,
+  Customer,
+  Seller,
+  RefreshToken,
+  UserAuthProvider,
+  PasswordResetSession,
+  EmailVerification,
+  Category,
+  Product,
+  ProductImage,
+  Wishlist,
+  Cart,
+  CartItem,
+  Order,
+  OrderItem,
+  Notification,
+  UserNotification,
   Review,
-  Conversation, Message,
+  Conversation,
+  Message,
+  ChatbotRecord,
 };

@@ -1,15 +1,20 @@
+const http = require("http");
 const app = require("./app.js");
 const { connectDB, sequelize } = require("./config/db.config.js");
 const seedRoles = require("./startup/seedRoles.js");
+const { initSocket } = require("./config/socket.config.js");
 
 async function startServer() {
   try {
     await connectDB();
-    
+
     //await sequelize.sync();
     await seedRoles();
 
-    app.listen(process.env.PORT, () => {
+    const httpServer = http.createServer(app);
+    initSocket(httpServer);
+
+    httpServer.listen(process.env.PORT, () => {
       console.log("Server running");
     });
   } catch (error) {

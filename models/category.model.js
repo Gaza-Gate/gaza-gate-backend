@@ -23,9 +23,15 @@ const Category = sequelize.define(
       allowNull: true,
     },
     image: {
+      type: DataTypes.STRING(512),
+      allowNull: true,
+      defaultValue:
+        "https://res.cloudinary.com/dq0z2abbv/image/upload/f_auto,q_auto/v1782711092/1782710900515_a1f9fc.png",
+    },
+    publicId: {
       type: DataTypes.STRING(255),
       allowNull: true,
-      defaultValue: "uploads/default-category.png",
+      field: "public_id",
     },
     isActive: {
       type: DataTypes.BOOLEAN,

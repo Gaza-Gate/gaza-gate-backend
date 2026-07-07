@@ -16,7 +16,7 @@ const Address = sequelize.define(
     },
     neighborhood: {
       type: DataTypes.STRING(100),
-      allowNull: false,
+      allowNull: true,
       validate: {
         notEmpty: true,
         len: [2, 100],
@@ -24,7 +24,7 @@ const Address = sequelize.define(
     },
     street: {
       type: DataTypes.STRING(255),
-      allowNull: false,
+      allowNull: true,
       validate: {
         notEmpty: true,
         len: [2, 255],
@@ -42,6 +42,16 @@ const Address = sequelize.define(
     updatedAt: "updated_at",
     underscored: true,
     indexes: [{ fields: ["user_id"] }],
+
+    validate: {
+      atLeastOneRequired() {
+        if (!this.neighborhood && !this.street) {
+          throw new Error(
+            "At least one of neighborhood or street must be provided.",
+          );
+        }
+      },
+    },
   },
 );
 
