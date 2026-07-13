@@ -1,7 +1,7 @@
 const { User } = require("../../models/associations.js");
-const token = require("../../utils/token.util.js");
-const AppError = require("../../utils/AppError.util.js");
-const UserStatus = require("../../constants/userStatus.constant.js");
+const token = require("../../utils/security/token.util.js");
+const AppError = require("../../utils/http/AppError.util.js");
+const UserStatus = require("../../constants/user/userStatus.constant.js");
 
 const authenticateAccessToken = async (req, res, next) => {
   try {

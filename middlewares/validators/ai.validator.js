@@ -1,5 +1,5 @@
 const { body } = require("express-validator");
-const AI = require("../../constants/ai.constant.js");
+const AI = require("../../constants/chatbot/ai.constant.js");
 
 const enhanceProductImageValidator = [
   body("prompt")

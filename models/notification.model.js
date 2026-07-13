@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db.config.js");
-const NOTIFICATION_TYPES = require("../constants/notificationTypes.constant.js");
+const NOTIFICATION_TYPES = require("../constants/notification/notificationTypes.constant.js");
 
 const Notification = sequelize.define(
   "Notification",
