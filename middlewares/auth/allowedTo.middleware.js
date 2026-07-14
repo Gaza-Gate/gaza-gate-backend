@@ -1,4 +1,4 @@
-const AppError = require("../../utils/AppError.util.js");
+const AppError = require("../../utils/http/AppError.util.js");
 
 const allowedTo = (...roles) => {
   return (req, res, next) => {
@@ -8,7 +8,10 @@ const allowedTo = (...roles) => {
 
     if (!roles.includes(req.user.role)) {
       return next(
-        AppError.fail("You do not have permission to perform this action.", 403),
+        AppError.fail(
+          "You do not have permission to perform this action.",
+          403,
+        ),
       );
     }
 

@@ -1,8 +1,8 @@
 const multer = require("multer");
-const AppError = require("../../utils/AppError.util.js");
+const AppError = require("../../utils/http/AppError.util.js");
 const {
   IMAGE_MIME_TYPES,
-} = require("../../constants/imageMimeTypes.constants.js");
+} = require("../../constants/shared/imageMimeTypes.constants.js");
 
 const allowedMimeTypes = Object.values(IMAGE_MIME_TYPES);
 

@@ -1,6 +1,6 @@
 const { body } = require("express-validator");
-const STOCK_TYPES = require("../../constants/stockType.constants.js");
-const PRODUCT_STATUS = require("../../constants/productStatus.constants.js");
+const STOCK_TYPES = require("../../constants/product/stockType.constant.js");
+const PRODUCT_STATUS = require("../../constants/product/productStatus.constant.js");
 
 const createProductValidator = [
   body("name")

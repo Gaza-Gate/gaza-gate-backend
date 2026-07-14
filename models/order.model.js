@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db.config.js");
-const ORDER_STATUSES = require("../constants/orderStatuses.constant.js");
+const ORDER_STATUSES = require("../constants/order/orderStatuses.constant.js");
 
 const Order = sequelize.define(
   "Order",
