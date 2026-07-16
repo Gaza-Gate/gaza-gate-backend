@@ -8,7 +8,7 @@ async function startServer() {
   try {
     await connectDB();
 
-    //await sequelize.sync();
+   //await sequelize.sync();
     await seedRoles();
 
     const httpServer = http.createServer(app);

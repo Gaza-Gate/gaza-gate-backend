@@ -1,8 +1,9 @@
-const { Op } = require("sequelize");
+const { Op, literal,fn,col } = require("sequelize");
 const Category = require("../../models/category.model");
 const AppError = require("../../utils/http/AppError.util");
 const cloudinaryService = require("../integrations/cloudinary.service");
 const PAGINATION = require("../../constants/shared/pagination.constant");
+const Product = require("../../models/product.model");
 
 const getAllCategories = async (req) => {
   const page = Math.max(Number(req.query.page) || PAGINATION.DEFAULT_PAGE, 1);
@@ -17,17 +18,33 @@ const getAllCategories = async (req) => {
 
   const { count, rows } = await Category.findAndCountAll({
     where,
-    order: [["name", "ASC"]],
+    attributes: [
+      'id',
+      'name',
+      'description',
+      [fn('COUNT', col('products.id')), 'productCount'],  // ✅ one JOIN, not N subqueries
+    ],
+    include: [
+      {
+        model:   Product,
+        as:         'products',
+        attributes: [],           // don't select any product columns
+        required:   false,        // LEFT JOIN — categories with 0 products still appear
+      },
+    ],
+    group:    ['Category.id'],    // required when using COUNT with include
+    order:    [['name', 'ASC']],
     limit,
     offset,
-    distinct: true,
+    distinct:  true,              // accurate count with GROUP BY
+    subQuery:  false,             // required alongside limit + group
   });
 
-  const totalPages = Math.ceil(count / limit);
+  const totalPages = Math.ceil(count.length / limit);
   return {
     categories: rows,
     pagination: {
-      totalItems: count,
+      totalItems: count.length,
       totalPages,
       currentPage: page,
       pageSize: limit,
