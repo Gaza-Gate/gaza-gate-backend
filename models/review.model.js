@@ -41,6 +41,16 @@ const Review = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    imageUrl: {
+      type: DataTypes.STRING(512),
+      allowNull: true,
+      field: "image_url",
+    },
+    publicId: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      field: "public_id",
+    },
     isDeleted: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

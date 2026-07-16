@@ -71,6 +71,7 @@ const mapReview = (review) => {
     id: review.id,
     rating: review.rating,
     comment: review.comment,
+    imageUrl: review.imageUrl ?? null,
     createdAt: review.get('createdAt'),
     customer: user
       ? {
@@ -129,7 +130,7 @@ const getPublicStore = async (sellerId) => {
 
     Review.findAndCountAll({
       where: { sellerId: seller.id },
-      attributes: ['id', 'rating', 'comment', ['created_at', 'createdAt']],
+      attributes: ['id', 'rating', 'comment', 'imageUrl', ['created_at', 'createdAt']],
       include: [
         {
           model: Customer,
@@ -170,10 +171,10 @@ const getPublicStore = async (sellerId) => {
       preview: previewProducts.map(mapPreviewProduct),
     },
     reviews: {
-      average: seller.rating,
-      total: seller.ratingCount,
-      list: reviews.map(mapReview),
-      hasMore: reviewsTotal > reviewsLimit,
+      average:      seller.rating,
+      total:        seller.ratingCount,
+      list:         reviews,
+      hasMore:      reviewsTotal > reviewsLimit
     },
   };
 };
