@@ -150,4 +150,28 @@ router.post(
   asyncWrapper(authController.logoutAll),
 );
 
+router.post(
+  "/become-seller",
+  authenticateAccessToken,
+  filterBody(["storeName", "storeDescription"]),
+  authValidator.becomeSellerValidator,
+  requestsValidator,
+  asyncWrapper(authController.becomeSeller),
+);
+
+router.post(
+  "/become-customer",
+  authenticateAccessToken,
+  asyncWrapper(authController.becomeCustomer),
+);
+
+router.post(
+  "/switch-role",
+  authenticateAccessToken,
+  filterBody(["role"]),
+  authValidator.switchRoleValidator,
+  requestsValidator,
+  asyncWrapper(authController.switchRole),
+);
+
 module.exports = router;

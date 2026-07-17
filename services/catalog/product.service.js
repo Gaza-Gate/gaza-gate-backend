@@ -14,9 +14,21 @@ const PRODUCT_STOCK_TYPES = require("../../constants/product/stockType.constant.
 const PRODUCT_STATUS = require("../../constants/product/productStatus.constant.js");
 const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const PUBLIC_SORT_OPTIONS = require("../../constants/shared/sort-options.constant.js");
+const USER_ROLES = require("../../constants/user/userRoles.constant.js");
 
 const getSellerIdFromRequest = (req) => {
-  return req.user?.id || req.user?.userId || null;
+  const userId = req.user?.id || req.user?.userId || null;
+
+  if (!userId) return null;
+
+  if (req.user?.role !== USER_ROLES.SELLER) {
+    throw AppError.fail(
+      "You do not have permission to perform this action.",
+      403,
+    );
+  }
+
+  return userId;
 };
 
 // Downloads an already-stored (Cloudinary) image so it can be re-optimized.

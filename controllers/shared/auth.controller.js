@@ -1,8 +1,4 @@
 const authService = require("../../services/identity/auth.service.js");
-const token = require("../../utils/security/token.util.js");
-const {
-  REFRESH_TOKEN_EXPIRES_IN,
-} = require("../../constants/auth/auth.constant.js");
 const apiResponse = require("../../utils/http/apiResponse.util.js");
 const userRoles = require("../../constants/user/userRoles.constant.js");
 const refreshTokenCookieOptions = require("../../utils/security/cookieOptions.util.js");
@@ -200,6 +196,83 @@ const logoutAll = async (req, res) => {
   );
 };
 
+const becomeSeller = async (req, res) => {
+  const currentRefreshToken =
+    req.cookies?.refreshToken || req.body?.refreshToken || null;
+
+  const result = await authService.becomeSeller(
+    req.user.id,
+    req.body,
+    currentRefreshToken,
+  );
+
+  res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
+
+  return apiResponse.sendSuccess(
+    res,
+    {
+      accessToken: result.accessToken,
+      user: result.user,
+      // Client must disconnect Socket.IO and reconnect with the new accessToken.
+      reconnectSocket: result.reconnectSocket,
+    },
+    200,
+  );
+};
+
+const becomeCustomer = async (req, res) => {
+  const currentRefreshToken =
+    req.cookies?.refreshToken || req.body?.refreshToken || null;
+
+  const result = await authService.becomeCustomer(
+    req.user.id,
+    currentRefreshToken,
+  );
+
+  res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
+
+  return apiResponse.sendSuccess(
+    res,
+    {
+      accessToken: result.accessToken,
+      user: result.user,
+      reconnectSocket: result.reconnectSocket,
+    },
+    200,
+  );
+};
+
+const switchRole = async (req, res) => {
+  const currentRefreshToken =
+    req.cookies?.refreshToken || req.body?.refreshToken || null;
+  const authHeader = req.headers.authorization || "";
+  const currentAccessToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
+
+  const result = await authService.switchRole(
+    req.user.id,
+    req.body.role,
+    req.user.role,
+    currentAccessToken,
+    currentRefreshToken,
+  );
+
+  if (result.rotatedRefresh && result.refreshToken) {
+    res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
+  }
+
+  return apiResponse.sendSuccess(
+    res,
+    {
+      accessToken: result.accessToken,
+      user: result.user,
+      reconnectSocket: result.reconnectSocket,
+    },
+    200,
+  );
+};
+
 module.exports = {
   customerLocalRegister,
   sellerLocalRegister,
@@ -218,6 +291,9 @@ module.exports = {
   sellerGoogleLogin,
 
   refreshAccessToken,
+  becomeSeller,
+  becomeCustomer,
+  switchRole,
   logout,
   logoutAll,
 };

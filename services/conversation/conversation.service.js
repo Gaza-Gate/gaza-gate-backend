@@ -263,15 +263,22 @@ const mapConversationListItem = (
   };
 };
 
-const listConversations = async (userId, query = {}) => {
+const listConversations = async (userId, role, query = {}) => {
   const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
   const limit = PAGINATION.DEFAULT_LIMIT;
   const offset = (page - 1) * limit;
 
+  let where;
+  if (role === USER_ROLES.CUSTOMER) {
+    where = { customerId: userId };
+  } else if (role === USER_ROLES.SELLER) {
+    where = { sellerId: userId };
+  } else {
+    throw AppError.fail("Access denied.", 403);
+  }
+
   const { count, rows } = await Conversation.findAndCountAll({
-    where: {
-      [Op.or]: [{ customerId: userId }, { sellerId: userId }],
-    },
+    where,
     attributes: CONVERSATION_ATTRIBUTES,
     include: [
       {
@@ -650,35 +657,44 @@ const sendMessage = async (userId, conversationId, { content, productId }) => {
   };
 
   const recipientId = getOtherPartyUserId(conversation, userId);
-  const { getIO, emitToUser } = getSocketUtils();
-  const io = getIO();
+  let io = null;
 
-  io.to(`conversation:${conversationId}`).emit("new_message", {
-    message: messagePayload,
-  });
+  try {
+    const { getIO, emitToUser } = getSocketUtils();
+    io = getIO();
 
-  emitToUser(recipientId, "conversation:updated", {
-    conversationId,
-    lastMessage: {
-      id: messagePayload.id,
-      content: messagePayload.content,
-      senderId: messagePayload.senderId,
-      createdAt: messagePayload.createdAt,
-    },
-    lastMessageAt: messagePayload.createdAt,
-  });
-
-  const recipientInConversationRoom = isUserInConversationRoom(
-    io,
-    conversationId,
-    recipientId,
-  );
-
-  if (!recipientInConversationRoom) {
-    // Fallback for clients that are connected but not joined to the conversation room.
-    emitToUser(recipientId, "new_message", {
+    io.to(`conversation:${conversationId}`).emit("new_message", {
       message: messagePayload,
     });
+
+    emitToUser(recipientId, "conversation:updated", {
+      conversationId,
+      lastMessage: {
+        id: messagePayload.id,
+        content: messagePayload.content,
+        senderId: messagePayload.senderId,
+        createdAt: messagePayload.createdAt,
+      },
+      lastMessageAt: messagePayload.createdAt,
+    });
+  } catch {
+    // Socket may not be initialized in some environments (HTTP-only / tests).
+  }
+
+  const recipientInConversationRoom = io
+    ? isUserInConversationRoom(io, conversationId, recipientId)
+    : false;
+
+  if (!recipientInConversationRoom) {
+    try {
+      const { emitToUser } = getSocketUtils();
+      // Fallback for clients that are connected but not joined to the conversation room.
+      emitToUser(recipientId, "new_message", {
+        message: messagePayload,
+      });
+    } catch {
+      // Socket may not be initialized in some environments.
+    }
 
     const preview =
       trimmedContent.length > 100

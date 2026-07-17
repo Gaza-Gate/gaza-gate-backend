@@ -7,7 +7,11 @@ const {
   getLatestEmailVerificationByUserId,
 } = require("./emailVerification.service.js");
 const { createVerificationCode } = require("./verification.service.js");
-const refreshTokenService = require("./refreshToken.service.js");
+const { getUserProfiles, assertHasProfile } = require("./profile.service.js");
+const {
+  issueTokenPair,
+  buildAuthUserPayload,
+} = require("./issueTokens.service.js");
 
 const User = require("../../models/user.model.js");
 const UserAuthProvider = require("../../models/UserAuthProvider.model.js");
@@ -67,7 +71,7 @@ const localRegister = async (data, roleName, createProfile) => {
           lastName,
           email,
           password: hashedPassword,
-          roleId: role.id,
+          activeRoleId: role.id,
           isVerified: false,
           status: "active",
         },
@@ -177,30 +181,15 @@ const verifyEmail = async ({ email, code }) => {
       ),
     ]);
 
-    const accessToken = token.signAccessToken({
-      userId: user.id,
-      role: user.role.name,
-    });
-    const refreshToken = token.signRefreshToken({
-      userId: user.id,
-      role: user.role.name,
-    });
+    const roleName = user.role.name;
+    const profiles = await getUserProfiles(user.id, transaction);
 
-    const tokenHash = hashToken(refreshToken);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
-
-    await refreshTokenService.createRefreshToken(
-      { userId: user.id, tokenHash, expiresAt },
+    const { accessToken, refreshToken } = await issueTokenPair(user, roleName, {
       transaction,
-    );
+      activeRoleId: user.activeRoleId,
+    });
 
-    const safeUser = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role.name,
-    };
+    const safeUser = buildAuthUserPayload(user, roleName, profiles);
 
     return { user: safeUser, accessToken, refreshToken };
   });
@@ -209,7 +198,6 @@ const verifyEmail = async ({ email, code }) => {
 const localLogin = async ({ email, password }, roleName) => {
   const user = await User.unscoped().findOne({
     where: { email },
-    include: [{ model: Role, as: "role" }],
   });
 
   const hashToCompare = user?.password || process.env.DUMMY_HASH;
@@ -218,11 +206,8 @@ const localLogin = async ({ email, password }, roleName) => {
   const genericError = AppError.fail("Invalid email or password.", 401);
 
   if (!user) throw genericError;
-  if (!user.role) throw AppError.error("User role not found.", 500);
 
-  const isAllowedRole =
-    user.role.name === roleName || user.role.name === userRoles.ADMIN;
-  if (!isAllowedRole) throw genericError;
+  if (!isPasswordValid) throw genericError;
 
   if (!user.password) {
     const authProvider = await UserAuthProvider.findOne({
@@ -236,8 +221,6 @@ const localLogin = async ({ email, password }, roleName) => {
     }
   }
 
-  if (!isPasswordValid) throw genericError;
-
   if (!user.isVerified) {
     throw AppError.fail("Please verify your email before logging in.", 403);
   }
@@ -248,31 +231,21 @@ const localLogin = async ({ email, password }, roleName) => {
     );
   }
 
-  const accessToken = token.signAccessToken({
-    userId: user.id,
-    role: user.role.name,
-  });
-  const refreshToken = token.signRefreshToken({
-    userId: user.id,
-    role: user.role.name,
-  });
+  const profiles = await getUserProfiles(user.id);
+  await assertHasProfile(user.id, roleName, profiles);
 
-  const tokenHash = hashToken(refreshToken);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+  const role = await Role.findOne({ where: { name: roleName } });
+  if (!role) {
+    throw AppError.error("User role not found.", 500);
+  }
+  if (user.activeRoleId !== role.id) {
+    await user.update({ activeRoleId: role.id });
+  }
 
-  await refreshTokenService.createRefreshToken({
-    userId: user.id,
-    tokenHash,
-    expiresAt,
+  const { accessToken, refreshToken } = await issueTokenPair(user, roleName, {
+    activeRoleId: role.id,
   });
-
-  const safeUser = {
-    id: user.id,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    role: user.role.name,
-  };
+  const safeUser = buildAuthUserPayload(user, roleName, profiles);
 
   return { user: safeUser, accessToken, refreshToken };
 };
@@ -527,6 +500,7 @@ const verifyResetCode = async ({ email, code }) => {
     resetToken,
   };
 };
+
 const resetPassword = async ({ resetToken, newPassword, confirmPassword }) => {
   if (newPassword !== confirmPassword) {
     throw AppError.fail(
@@ -584,9 +558,17 @@ const resetPassword = async ({ resetToken, newPassword, confirmPassword }) => {
       throw genericError;
     }
 
+    // Password reset also invalidates every existing session (local
+    // and role-mode alike) — bump tokenVersion too so any access token
+    // still inside its 15-minute window dies immediately, not just
+    // refresh tokens.
     await Promise.all([
       user.update(
-        { password: hashedPassword, passwordChangedAt: new Date() },
+        {
+          password: hashedPassword,
+          passwordChangedAt: new Date(),
+          tokenVersion: user.tokenVersion + 1,
+        },
         { transaction },
       ),
       resetSession.update({ usedAt: new Date() }, { transaction }),
@@ -603,6 +585,9 @@ const resetPassword = async ({ resetToken, newPassword, confirmPassword }) => {
   };
 };
 
+// ============================================================
+// customerGoogleRegister
+// ============================================================
 const customerGoogleRegister = async (payload) => {
   const customerRole = await Role.findOne({
     where: { name: userRoles.CUSTOMER },
@@ -618,17 +603,7 @@ const customerGoogleRegister = async (payload) => {
 
   const userId = require("crypto").randomUUID();
 
-  const accessToken = token.signAccessToken({
-    userId,
-    role: customerRole.name,
-  });
-  const refreshToken = token.signRefreshToken({
-    userId,
-    role: customerRole.name,
-  });
-
-  const tokenHash = hashToken(refreshToken);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+  let createdUser;
 
   await sequelize.transaction(async (transaction) => {
     const existingUser = await User.findOne({
@@ -644,14 +619,14 @@ const customerGoogleRegister = async (payload) => {
       );
     }
 
-    await User.create(
+    createdUser = await User.create(
       {
         id: userId,
         firstName,
         lastName,
         email: payload.email,
         password: null,
-        roleId: customerRole.id,
+        activeRoleId: customerRole.id,
         ...(payload.picture && { avatar: payload.picture }),
         isVerified: true,
         status: "active",
@@ -669,37 +644,37 @@ const customerGoogleRegister = async (payload) => {
         { transaction },
       ),
       Customer.create({ userId }, { transaction }),
-      refreshTokenService.createRefreshToken(
-        { userId, tokenHash, expiresAt },
-        transaction,
-      ),
     ]);
   });
 
-  const safeUser = {
-    id: userId,
-    firstName,
-    lastName,
-    email: payload.email,
-    role: customerRole.name,
-  };
+  const profiles = await getUserProfiles(createdUser.id);
+  const { accessToken, refreshToken } = await issueTokenPair(
+    createdUser,
+    userRoles.CUSTOMER,
+    { activeRoleId: customerRole.id },
+  );
+  const safeUser = buildAuthUserPayload(
+    createdUser,
+    userRoles.CUSTOMER,
+    profiles,
+  );
 
   return { user: safeUser, accessToken, refreshToken };
 };
 
+// ============================================================
+// customerGoogleLogin
+//
+// Same capability-based change as localLogin: checks for a Customer
+// row instead of requiring role.name === "customer".
+// ============================================================
 const customerGoogleLogin = async (payload) => {
   const authProvider = await UserAuthProvider.findOne({
     where: {
       provider: "google",
       providerId: payload.sub,
     },
-    include: [
-      {
-        model: User,
-        as: "user",
-        include: [{ model: Role, as: "role" }],
-      },
-    ],
+    include: [{ model: User, as: "user" }],
   });
 
   if (!authProvider) {
@@ -707,17 +682,7 @@ const customerGoogleLogin = async (payload) => {
   }
 
   const user = authProvider.user;
-  const role = user.role;
 
-  if (!role) {
-    throw AppError.error("User role not found.", 500);
-  }
-  if (role.name !== userRoles.CUSTOMER) {
-    throw AppError.fail(
-      "This account is registered as a Seller. Please login from the Seller page.",
-      403,
-    );
-  }
   if (!user.isVerified) {
     throw AppError.fail("Your account is not verified.", 403);
   }
@@ -725,63 +690,65 @@ const customerGoogleLogin = async (payload) => {
     throw AppError.fail("Your account has been banned.", 403);
   }
 
-  const accessToken = token.signAccessToken({
-    userId: user.id,
-    role: role.name,
+  const profiles = await getUserProfiles(user.id);
+  if (!profiles.hasCustomer) {
+    throw AppError.fail(
+      "This account doesn't have a Customer profile yet. Please register or switch modes from your account.",
+      403,
+    );
+  }
+
+  const customerRole = await Role.findOne({
+    where: { name: userRoles.CUSTOMER },
   });
-  const refreshToken = token.signRefreshToken({
-    userId: user.id,
-    role: role.name,
-  });
+  if (!customerRole) {
+    throw AppError.error("User role not found.", 500);
+  }
+  if (user.activeRoleId !== customerRole.id) {
+    await user.update({ activeRoleId: customerRole.id });
+  }
 
-  const tokenHash = hashToken(refreshToken);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+  if (payload.picture && user.avatar !== payload.picture) {
+    await user.update({ avatar: payload.picture });
+  }
 
-  await sequelize.transaction(async (transaction) => {
-    const writes = [
-      refreshTokenService.createRefreshToken(
-        { userId: user.id, tokenHash, expiresAt },
-        transaction,
-      ),
-    ];
-
-    if (payload.picture && user.avatar !== payload.picture) {
-      writes.push(user.update({ avatar: payload.picture }, { transaction }));
-    }
-
-    await Promise.all(writes);
-  });
-
-  const safeUser = {
-    id: user.id,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    role: role.name,
-  };
+  const { accessToken, refreshToken } = await issueTokenPair(
+    user,
+    userRoles.CUSTOMER,
+    { activeRoleId: customerRole.id },
+  );
+  const safeUser = buildAuthUserPayload(user, userRoles.CUSTOMER, profiles);
 
   return { user: safeUser, accessToken, refreshToken };
 };
 
+// ============================================================
+// sellerGoogleRegisterInit
+//
+// Changed: previously rejected outright if the email already existed
+// as a customer. Now still rejects (Google registration always creates
+// a brand-new User row, so an existing email of ANY kind is a
+// conflict) — but the error message points existing customers at the
+// become-seller flow instead of a dead end.
+// ============================================================
 const sellerGoogleRegisterInit = async (payload) => {
   const existingUser = await User.findOne({
     where: { email: payload.email },
-    include: [{ model: Role, as: "role" }],
   });
 
   if (existingUser) {
-    const roleName = existingUser.role?.name;
+    const profiles = await getUserProfiles(existingUser.id);
 
-    if (roleName === userRoles.SELLER) {
+    if (profiles.hasSeller) {
       throw AppError.fail(
         "This email is already registered as a Seller. Please login.",
         409,
       );
     }
 
-    if (roleName === userRoles.CUSTOMER) {
+    if (profiles.hasCustomer) {
       throw AppError.fail(
-        "This email is already registered as a Customer. Please login from the Customer page.",
+        "This email is already registered as a Customer. Please log in and use 'Become a Seller' from your account instead.",
         409,
       );
     }
@@ -805,8 +772,6 @@ const sellerGoogleRegisterInit = async (payload) => {
 
   return { pendingToken };
 };
-
-/////////////////////////////////////////////////////////////////////////////////////////////////
 
 const sellerGoogleRegisterComplete = async (data) => {
   const {
@@ -852,18 +817,7 @@ const sellerGoogleRegisterComplete = async (data) => {
   }
 
   const userId = require("crypto").randomUUID();
-
-  const accessToken = token.signAccessToken({
-    userId,
-    role: sellerRole.name,
-  });
-  const refreshToken = token.signRefreshToken({
-    userId,
-    role: sellerRole.name,
-  });
-
-  const tokenHash = hashToken(refreshToken);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+  let createdUser;
 
   await sequelize.transaction(async (transaction) => {
     const existingUser = await User.findOne({
@@ -878,14 +832,14 @@ const sellerGoogleRegisterComplete = async (data) => {
       );
     }
 
-    await User.create(
+    createdUser = await User.create(
       {
         id: userId,
         firstName: finalFirstName,
         lastName: finalLastName,
         email: decoded.email,
         password: null,
-        roleId: sellerRole.id,
+        activeRoleId: sellerRole.id,
         ...(decoded.avatar && { avatar: decoded.avatar }),
         isVerified: true,
         status: "active",
@@ -910,37 +864,34 @@ const sellerGoogleRegisterComplete = async (data) => {
         },
         { transaction },
       ),
-      refreshTokenService.createRefreshToken(
-        { userId, tokenHash, expiresAt },
-        transaction,
-      ),
     ]);
   });
 
-  const safeUser = {
-    id: userId,
-    firstName: finalFirstName,
-    lastName: finalLastName,
-    email: decoded.email,
-    role: sellerRole.name,
-  };
+  const profiles = await getUserProfiles(createdUser.id);
+  const { accessToken, refreshToken } = await issueTokenPair(
+    createdUser,
+    userRoles.SELLER,
+    { activeRoleId: sellerRole.id },
+  );
+  const safeUser = buildAuthUserPayload(
+    createdUser,
+    userRoles.SELLER,
+    profiles,
+  );
 
   return { user: safeUser, accessToken, refreshToken };
 };
 
+// ============================================================
+// sellerGoogleLogin
+// ============================================================
 const sellerGoogleLogin = async (payload) => {
   const authProvider = await UserAuthProvider.findOne({
     where: {
       provider: "google",
       providerId: payload.sub,
     },
-    include: [
-      {
-        model: User,
-        as: "user",
-        include: [{ model: Role, as: "role" }],
-      },
-    ],
+    include: [{ model: User, as: "user" }],
   });
 
   if (!authProvider) {
@@ -948,78 +899,51 @@ const sellerGoogleLogin = async (payload) => {
   }
 
   const user = authProvider.user;
-  const role = user.role;
-
-  if (!role) {
-    throw AppError.error("User role not found.", 500);
-  }
-
-  if (role.name !== userRoles.SELLER) {
-    throw AppError.fail(
-      "This account is registered as a Customer. Please login from the Customer page.",
-      403,
-    );
-  }
 
   if (!user.isVerified) {
     throw AppError.fail("Your account is not verified.", 403);
   }
-
   if (user.status === userStatus.BANNED) {
     throw AppError.fail("Your account has been banned.", 403);
   }
 
-  const accessToken = token.signAccessToken({
-    userId: user.id,
-    role: role.name,
-  });
-  const refreshToken = token.signRefreshToken({
-    userId: user.id,
-    role: role.name,
-  });
+  const profiles = await getUserProfiles(user.id);
+  if (!profiles.hasSeller) {
+    throw AppError.fail(
+      "This account doesn't have a Seller profile yet. Please register or switch modes from your account.",
+      403,
+    );
+  }
 
-  const tokenHash = hashToken(refreshToken);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
+  const sellerRole = await Role.findOne({ where: { name: userRoles.SELLER } });
+  if (!sellerRole) {
+    throw AppError.error("User role not found.", 500);
+  }
+  if (user.activeRoleId !== sellerRole.id) {
+    await user.update({ activeRoleId: sellerRole.id });
+  }
 
-  await sequelize.transaction(async (transaction) => {
-    const writes = [
-      refreshTokenService.createRefreshToken(
-        { userId: user.id, tokenHash, expiresAt },
-        transaction,
-      ),
-    ];
+  if (payload.picture && user.avatar !== payload.picture) {
+    await user.update({ avatar: payload.picture });
+  }
 
-    if (payload.picture && user.avatar !== payload.picture) {
-      writes.push(user.update({ avatar: payload.picture }, { transaction }));
-    }
-
-    await Promise.all(writes);
-  });
-
-  const safeUser = {
-    id: user.id,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    role: role.name,
-  };
+  const { accessToken, refreshToken } = await issueTokenPair(
+    user,
+    userRoles.SELLER,
+    { activeRoleId: sellerRole.id },
+  );
+  const safeUser = buildAuthUserPayload(user, userRoles.SELLER, profiles);
 
   return { user: safeUser, accessToken, refreshToken };
 };
 
-const saveRefreshToken = async (userId, refreshToken, transaction = null) => {
-  const tokenHash = hashToken(refreshToken);
-
-  await RefreshToken.create(
-    {
-      userId,
-      tokenHash,
-      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS),
-    },
-    { transaction },
-  );
-};
-
+// ============================================================
+// refreshAccessToken
+//
+// Session role comes from RefreshToken.activeRoleId (per-device),
+// NOT User.activeRoleId. Rotation must copy that activeRoleId onto
+// the new refresh row via issueTokenPair.
+// ============================================================
 const refreshAccessToken = async (oldRefreshToken) => {
   let payload;
   try {
@@ -1054,31 +978,295 @@ const refreshAccessToken = async (oldRefreshToken) => {
       throw AppError.fail("Your account has been banned.", 403);
     }
 
-    const role = await Role.findByPk(user.roleId, { transaction: t });
+    const tokenVersionFromPayload = payload.tokenVersion ?? 0;
+    const currentTokenVersion = user.tokenVersion ?? 0;
+    if (tokenVersionFromPayload !== currentTokenVersion) {
+      throw AppError.fail("Invalid or expired refresh token", 401);
+    }
+
+    const role = await Role.findByPk(storedToken.activeRoleId, {
+      transaction: t,
+    });
     if (!role) throw AppError.fail("User role not found", 404);
 
     storedToken.revokedAt = new Date();
     await storedToken.save({ transaction: t });
 
-    const newRefreshToken = token.signRefreshToken({
-      userId: user.id,
-      role: role.name,
-    });
-    await RefreshToken.create(
+    const { accessToken, refreshToken } = await issueTokenPair(
+      user,
+      role.name,
       {
-        userId: user.id,
-        tokenHash: hashToken(newRefreshToken),
-        expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS),
+        transaction: t,
+        activeRoleId: storedToken.activeRoleId,
       },
-      { transaction: t },
     );
 
-    const newAccessToken = token.signAccessToken({
-      userId: user.id,
-      role: role.name,
+    return { accessToken, refreshToken };
+  });
+};
+
+/**
+ * Soft-revoke only the calling device's refresh row (by token hash).
+ * Never wipes all refresh rows for the user.
+ */
+const softRevokeCurrentDeviceRefresh = async (
+  userId,
+  currentRefreshToken,
+  transaction,
+) => {
+  if (!currentRefreshToken) return;
+
+  const tokenHash = hashToken(currentRefreshToken);
+  const storedToken = await RefreshToken.findOne({
+    where: { tokenHash, userId, revokedAt: null },
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+
+  if (storedToken) {
+    storedToken.revokedAt = new Date();
+    await storedToken.save({ transaction });
+  }
+};
+
+const becomeSeller = async (
+  userId,
+  { storeName, storeDescription },
+  currentRefreshToken = null,
+) => {
+  try {
+    return await sequelize.transaction(async (transaction) => {
+      const user = await User.findByPk(userId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!user) {
+        throw AppError.fail("User not found", 404);
+      }
+      if (!user.isVerified) {
+        throw AppError.fail("Please verify your email before continuing.", 403);
+      }
+      if (user.status === userStatus.BANNED) {
+        throw AppError.fail("Your account has been banned.", 403);
+      }
+
+      const profiles = await getUserProfiles(user.id, transaction);
+      if (profiles.hasSeller) {
+        throw AppError.fail("Already a seller", 409);
+      }
+
+      const sellerRole = await Role.findOne({
+        where: { name: userRoles.SELLER },
+        transaction,
+      });
+      if (!sellerRole) {
+        throw AppError.error("User role not found.", 500);
+      }
+
+      await Seller.create(
+        {
+          userId: user.id,
+          storeName,
+          storeDescription,
+        },
+        { transaction },
+      );
+
+      // Last-preferred default for future logins — not live session auth.
+      if (user.activeRoleId !== sellerRole.id) {
+        await user.update(
+          { activeRoleId: sellerRole.id },
+          { transaction },
+        );
+      }
+
+      await softRevokeCurrentDeviceRefresh(
+        user.id,
+        currentRefreshToken,
+        transaction,
+      );
+
+      const updatedProfiles = await getUserProfiles(user.id, transaction);
+      const { accessToken, refreshToken } = await issueTokenPair(
+        user,
+        userRoles.SELLER,
+        { transaction, activeRoleId: sellerRole.id },
+      );
+      const safeUser = buildAuthUserPayload(
+        user,
+        userRoles.SELLER,
+        updatedProfiles,
+      );
+
+      return {
+        user: safeUser,
+        accessToken,
+        refreshToken,
+        reconnectSocket: true,
+      };
+    });
+  } catch (error) {
+    if (error instanceof UniqueConstraintError) {
+      throw AppError.fail("Already a seller", 409);
+    }
+    throw error;
+  }
+};
+
+const becomeCustomer = async (userId, currentRefreshToken = null) => {
+  try {
+    return await sequelize.transaction(async (transaction) => {
+      const user = await User.findByPk(userId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!user) {
+        throw AppError.fail("User not found", 404);
+      }
+      if (!user.isVerified) {
+        throw AppError.fail("Please verify your email before continuing.", 403);
+      }
+      if (user.status === userStatus.BANNED) {
+        throw AppError.fail("Your account has been banned.", 403);
+      }
+
+      const profiles = await getUserProfiles(user.id, transaction);
+      if (profiles.hasCustomer) {
+        throw AppError.fail("Already a customer", 409);
+      }
+
+      const customerRole = await Role.findOne({
+        where: { name: userRoles.CUSTOMER },
+        transaction,
+      });
+      if (!customerRole) {
+        throw AppError.error("User role not found.", 500);
+      }
+
+      await Customer.create({ userId: user.id }, { transaction });
+
+      if (user.activeRoleId !== customerRole.id) {
+        await user.update(
+          { activeRoleId: customerRole.id },
+          { transaction },
+        );
+      }
+
+      await softRevokeCurrentDeviceRefresh(
+        user.id,
+        currentRefreshToken,
+        transaction,
+      );
+
+      const updatedProfiles = await getUserProfiles(user.id, transaction);
+      const { accessToken, refreshToken } = await issueTokenPair(
+        user,
+        userRoles.CUSTOMER,
+        { transaction, activeRoleId: customerRole.id },
+      );
+      const safeUser = buildAuthUserPayload(
+        user,
+        userRoles.CUSTOMER,
+        updatedProfiles,
+      );
+
+      return {
+        user: safeUser,
+        accessToken,
+        refreshToken,
+        reconnectSocket: true,
+      };
+    });
+  } catch (error) {
+    if (error instanceof UniqueConstraintError) {
+      throw AppError.fail("Already a customer", 409);
+    }
+    throw error;
+  }
+};
+
+const switchRole = async (
+  userId,
+  targetRole,
+  currentJwtRole,
+  currentAccessToken,
+  currentRefreshToken = null,
+) => {
+  if (targetRole !== userRoles.CUSTOMER && targetRole !== userRoles.SELLER) {
+    throw AppError.fail('Role must be "customer" or "seller".', 400);
+  }
+
+  if (targetRole === currentJwtRole) {
+    const profiles = await getUserProfiles(userId);
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw AppError.fail("User not found", 404);
+    }
+    const safeUser = buildAuthUserPayload(user, currentJwtRole, profiles);
+    return {
+      user: safeUser,
+      accessToken: currentAccessToken,
+      refreshToken: null,
+      reconnectSocket: false,
+      rotatedRefresh: false,
+    };
+  }
+
+  return await sequelize.transaction(async (transaction) => {
+    const user = await User.findByPk(userId, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
     });
 
-    return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+    if (!user) {
+      throw AppError.fail("User not found", 404);
+    }
+    if (!user.isVerified) {
+      throw AppError.fail("Please verify your email before continuing.", 403);
+    }
+    if (user.status === userStatus.BANNED) {
+      throw AppError.fail("Your account has been banned.", 403);
+    }
+
+    const profiles = await getUserProfiles(user.id, transaction);
+    await assertHasProfile(user.id, targetRole, profiles);
+
+    const role = await Role.findOne({
+      where: { name: targetRole },
+      transaction,
+    });
+    if (!role) {
+      throw AppError.error("User role not found.", 500);
+    }
+
+    // tokenVersion is intentionally NOT bumped — mode change is per-device.
+
+    if (user.activeRoleId !== role.id) {
+      await user.update({ activeRoleId: role.id }, { transaction });
+    }
+
+    await softRevokeCurrentDeviceRefresh(
+      user.id,
+      currentRefreshToken,
+      transaction,
+    );
+
+    const { accessToken, refreshToken } = await issueTokenPair(
+      user,
+      targetRole,
+      { transaction, activeRoleId: role.id },
+    );
+    const safeUser = buildAuthUserPayload(user, targetRole, profiles);
+
+    return {
+      user: safeUser,
+      accessToken,
+      refreshToken,
+      reconnectSocket: true,
+      rotatedRefresh: true,
+    };
   });
 };
 
@@ -1114,6 +1302,9 @@ module.exports = {
   sellerGoogleLogin,
 
   refreshAccessToken,
+  becomeSeller,
+  becomeCustomer,
+  switchRole,
   logout,
   logoutAll,
 };

@@ -5,6 +5,16 @@ const {
   PENDING_TOKEN_EXPIRES_IN,
 } = require("../../constants/auth/auth.constant.js");
 
+function buildTokenPayload({ userId, role, tokenVersion }) {
+  if (!userId || !role || tokenVersion === undefined || tokenVersion === null) {
+    throw new Error(
+      "buildTokenPayload requires userId, role, and tokenVersion",
+    );
+  }
+
+  return { userId, role, tokenVersion };
+}
+
 function signAccessToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET_KEY, {
     expiresIn: ACCESS_TOKEN_EXPIRES_IN,
@@ -36,6 +46,7 @@ const verifyPendingToken = (token) => {
 };
 
 module.exports = {
+  buildTokenPayload,
   signAccessToken,
   signRefreshToken,
   signPendingToken,

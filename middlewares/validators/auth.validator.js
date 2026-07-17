@@ -163,6 +163,29 @@ const sellerCompleteRegistrationValidator = [
     .withMessage("Store description must be between 5 and 500 characters"),
 ];
 
+const becomeSellerValidator = [
+  body("storeName")
+    .trim()
+    .notEmpty()
+    .withMessage("Store name is required")
+    .isLength({ min: 2, max: 100 })
+    .withMessage("Store name must be between 2 and 100 characters"),
+  body("storeDescription")
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage("Store description must not exceed 500 characters"),
+];
+
+const switchRoleValidator = [
+  body("role")
+    .trim()
+    .notEmpty()
+    .withMessage("Role is required")
+    .isIn(["customer", "seller"])
+    .withMessage('Role must be "customer" or "seller"'),
+];
+
 module.exports = {
   customerLocalRegisterValidator,
   sellerLocalRegisterValidator,
@@ -174,4 +197,6 @@ module.exports = {
   resetPasswordValidator,
   socialAuthValidator,
   sellerCompleteRegistrationValidator,
+  becomeSellerValidator,
+  switchRoleValidator,
 };
