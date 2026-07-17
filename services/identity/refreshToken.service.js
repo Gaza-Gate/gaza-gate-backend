@@ -2,7 +2,7 @@ const RefreshToken = require("../../models/refreshToken.model.js");
 const { Op } = require("sequelize");
 
 const createRefreshToken = async (
-  { userId, tokenHash, expiresAt },
+  { userId, tokenHash, expiresAt, activeRoleId },
   transaction = null,
 ) => {
   return await RefreshToken.create(
@@ -10,6 +10,7 @@ const createRefreshToken = async (
       userId,
       tokenHash,
       expiresAt,
+      activeRoleId,
     },
     { transaction },
   );

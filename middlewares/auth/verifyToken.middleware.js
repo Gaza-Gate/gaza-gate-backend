@@ -28,6 +28,13 @@ const authenticateAccessToken = async (req, res, next) => {
       throw AppError.fail("Your account has been banned.", 403);
     }
 
+    const tokenVersionFromPayload = payload.tokenVersion ?? 0;
+    const currentTokenVersion = user.tokenVersion ?? 0;
+
+    if (tokenVersionFromPayload !== currentTokenVersion) {
+      throw AppError.fail("Invalid or expired access token", 401);
+    }
+
     req.user = {
       id: user.id,
       role: payload.role,

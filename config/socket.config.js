@@ -30,6 +30,12 @@ const initSocket = (httpServer) => {
         return next(new Error("Account is banned or does not exist."));
       }
 
+      const tokenVersionFromPayload = decoded.tokenVersion ?? 0;
+      const currentTokenVersion = user.tokenVersion ?? 0;
+      if (tokenVersionFromPayload !== currentTokenVersion) {
+        return next(new Error("Invalid or expired authentication token."));
+      }
+
       socket.userId = decoded.userId;
       socket.role = decoded.role;
       next();

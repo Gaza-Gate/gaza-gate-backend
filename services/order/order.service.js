@@ -16,11 +16,20 @@ const {
 const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const NOTIFICATION_TYPES = require("../../constants/notification/notificationTypes.constant.js");
 const notificationService = require("../notification/notification.service.js");
+const USER_ROLES = require("../../constants/user/userRoles.constant.js");
 
 const getSellerFromRequest = async (req) => {
   const userId = req.user?.id || req.user?.userId || null;
 
   if (!userId) return null;
+
+  if (req.user?.role !== USER_ROLES.SELLER) {
+    throw AppError.fail(
+      "You do not have permission to perform this action.",
+      403,
+    );
+  }
+
   return Seller.findOne({
     where: { userId },
     attributes: ["id"],

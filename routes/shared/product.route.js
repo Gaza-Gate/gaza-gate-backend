@@ -11,6 +11,8 @@ const {
 } = require("../../middlewares/validators/customerProduct.validator.js");
 const productController = require("../../controllers/shared/product.controller.js");
 const authenticateAccessToken = require("../../middlewares/auth/verifyToken.middleware.js");
+const allowedTo = require("../../middlewares/auth/allowedTo.middleware.js");
+const USER_ROLES = require("../../constants/user/userRoles.constant.js");
 
 router.get(
   "/public",
@@ -26,11 +28,17 @@ router.get(
   productController.getProductDetailsPublic,
 );
 
-router.get("/", authenticateAccessToken, productController.getSellerProducts);
+router.get(
+  "/",
+  authenticateAccessToken,
+  allowedTo(USER_ROLES.SELLER),
+  productController.getSellerProducts,
+);
 
 router.post(
   "/",
   authenticateAccessToken,
+  allowedTo(USER_ROLES.SELLER),
   upload(1).single("image"),
   createProductValidator,
   requestsValidator,
@@ -40,6 +48,7 @@ router.post(
 router.put(
   "/:id",
   authenticateAccessToken,
+  allowedTo(USER_ROLES.SELLER),
   upload(1).single("image"),
   updateProductValidator,
   requestsValidator,
@@ -49,9 +58,15 @@ router.put(
 router.patch(
   "/:id/toggle",
   authenticateAccessToken,
+  allowedTo(USER_ROLES.SELLER),
   productController.toggleStatus,
 );
 
-router.delete("/:id", authenticateAccessToken, productController.deleteProduct);
+router.delete(
+  "/:id",
+  authenticateAccessToken,
+  allowedTo(USER_ROLES.SELLER),
+  productController.deleteProduct,
+);
 
 module.exports = router;

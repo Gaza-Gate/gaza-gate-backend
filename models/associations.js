@@ -25,13 +25,13 @@ const ChatbotRecord = require("./chatbotRecord.model.js");
 // ==================== AUTH ====================
 
 Role.hasMany(User, {
-  foreignKey: { name: "roleId", field: "role_id" },
+  foreignKey: { name: "activeRoleId", field: "active_role_id" },
   as: "users",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 User.belongsTo(Role, {
-  foreignKey: { name: "roleId", field: "role_id" },
+  foreignKey: { name: "activeRoleId", field: "active_role_id" },
   as: "role",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
@@ -79,6 +79,19 @@ RefreshToken.belongsTo(User, {
   foreignKey: { name: "userId", field: "user_id" },
   as: "user",
   onDelete: "CASCADE",
+});
+
+Role.hasMany(RefreshToken, {
+  foreignKey: { name: "activeRoleId", field: "active_role_id" },
+  as: "refreshTokens",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+RefreshToken.belongsTo(Role, {
+  foreignKey: { name: "activeRoleId", field: "active_role_id" },
+  as: "activeRole",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 
 User.hasMany(UserAuthProvider, {

@@ -5,6 +5,7 @@ const asyncWrapper = require("../../utils/http/asyncWrapper.util.js");
 const listConversations = asyncWrapper(async (req, res) => {
   const data = await conversationService.listConversations(
     req.user.id,
+    req.user.role,
     req.query,
   );
   return apiResponse.sendSuccess(res, data, 200);
