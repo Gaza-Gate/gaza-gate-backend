@@ -51,6 +51,16 @@ const Review = sequelize.define(
       allowNull: true,
       field: "public_id",
     },
+    sellerReply: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "seller_reply",
+    },
+    sellerRepliedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "seller_replied_at",
+    },
     isDeleted: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

@@ -300,11 +300,13 @@ const getSellerReviews = async (userId, query) => {
     attributes: ["id", "rating", "ratingCount"],
   });
 
+  if (!seller) throw AppError.fail("Seller not found.", 404);
+
   const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
   const limit = PAGINATION.DEFAULT_LIMIT;
   const offset = (page - 1) * limit;
 
-  const where = { sellerId: seller.id };
+  const where = { sellerId: seller.id, isDeleted: false };
   const rating = query.rating;
   const parsedRating = parseInt(rating);
 
@@ -314,7 +316,15 @@ const getSellerReviews = async (userId, query) => {
 
   const { count, rows } = await Review.findAndCountAll({
     where: where,
-    attributes: ["rating", "comment", "imageUrl", ["created_at", "createdAt"]],
+    attributes: [
+      "id",
+      "rating",
+      "comment",
+      "imageUrl",
+      "sellerReply",
+      "sellerRepliedAt",
+      ["created_at", "createdAt"],
+    ],
     include: [
       {
         model: Customer,
@@ -360,4 +370,71 @@ const getSellerReviews = async (userId, query) => {
   };
 };
 
-module.exports = { createReview, getSellerReviews };
+const replyToReview = async (userId, reviewId, reply) => {
+  if (!userId) {
+    throw AppError.fail("Seller authentication data is missing.", 401);
+  }
+
+  const seller = await Seller.findOne({
+    where: { userId },
+    attributes: ["id", "storeName"],
+  });
+  if (!seller) throw AppError.fail("Seller not found.", 404);
+
+  const review = await Review.findOne({
+    where: {
+      id: reviewId,
+      sellerId: seller.id,
+      isDeleted: false,
+    },
+    attributes: [
+      "id",
+      "sellerReply",
+      "productId",
+      "customerId",
+    ],
+    include: [
+      {
+        model: Product,
+        as: "product",
+        attributes: ["name"],
+      },
+      {
+        model: Customer,
+        as: "customer",
+        attributes: ["id", "userId"],
+      },
+    ],
+  });
+
+  if (!review) throw AppError.fail("Review not found.", 404);
+
+  const isFirstReply = !review.sellerReply;
+  const trimmedReply = reply.trim();
+  const repliedAt = new Date();
+
+  await review.update({
+    sellerReply: trimmedReply,
+    sellerRepliedAt: repliedAt,
+  });
+
+  if (isFirstReply && review.customer?.userId) {
+    const productName = review.product?.name ?? "your product";
+    await notificationService.notifySafely({
+      recipientUserIds: [review.customer.userId],
+      senderId: userId,
+      type: NOTIFICATION_TYPES.REVIEW,
+      title: "رد على تقييمك",
+      content: `رد ${seller.storeName} على تقييمك للمنتج "${productName}"`,
+      actionUrl: `/orders`,
+    });
+  }
+
+  return {
+    id: review.id,
+    sellerReply: trimmedReply,
+    sellerRepliedAt: repliedAt,
+  };
+};
+
+module.exports = { createReview, getSellerReviews, replyToReview };

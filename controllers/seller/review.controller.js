@@ -12,4 +12,13 @@ const getSellerReviews = asyncWrapper(async (req, res) => {
   return apiResponse.sendSuccess(res, reviews, 200);
 });
 
-module.exports = { createReview, getSellerReviews };
+const replyToReview = asyncWrapper(async (req, res) => {
+  const result = await reviewService.replyToReview(
+    req.user.id,
+    req.params.id,
+    req.body.reply,
+  );
+  return apiResponse.sendSuccess(res, result, 200);
+});
+
+module.exports = { createReview, getSellerReviews, replyToReview };

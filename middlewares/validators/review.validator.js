@@ -36,4 +36,15 @@ const createReviewValidator = [
   }),
 ];
 
-module.exports = { createReviewValidator };
+const replyToReviewValidator = [
+  body("reply")
+    .trim()
+    .notEmpty()
+    .withMessage("reply is required")
+    .isString()
+    .withMessage("reply must be a string")
+    .isLength({ min: 1, max: 1000 })
+    .withMessage("reply must be between 1 and 1000 characters"),
+];
+
+module.exports = { createReviewValidator, replyToReviewValidator };
