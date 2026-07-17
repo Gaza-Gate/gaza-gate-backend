@@ -3,6 +3,7 @@ const Role = require("./role.model");
 const Address = require("./address.model");
 const Customer = require("./customer.model");
 const Seller = require("./seller.model");
+const Admin = require("./admin.model");
 const RefreshToken = require("./refreshToken.model");
 const PasswordResetSession = require("./passwordResetSession.model.js");
 const UserAuthProvider = require("./UserAuthProvider.model.js");
@@ -65,6 +66,17 @@ User.hasOne(Seller, {
   onDelete: "CASCADE",
 });
 Seller.belongsTo(User, {
+  foreignKey: { name: "userId", field: "user_id" },
+  as: "user",
+  onDelete: "CASCADE",
+});
+
+User.hasOne(Admin, {
+  foreignKey: { name: "userId", field: "user_id" },
+  as: "admin",
+  onDelete: "CASCADE",
+});
+Admin.belongsTo(User, {
   foreignKey: { name: "userId", field: "user_id" },
   as: "user",
   onDelete: "CASCADE",
@@ -469,6 +481,7 @@ module.exports = {
   Address,
   Customer,
   Seller,
+  Admin,
   RefreshToken,
   UserAuthProvider,
   PasswordResetSession,

@@ -11,6 +11,7 @@ const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const ORDER_STATUSES = require("../../constants/order/orderStatuses.constant.js");
 const NOTIFICATION_TYPES = require("../../constants/notification/notificationTypes.constant.js");
 const notificationService = require("../notification/notification.service.js");
+const cloudinaryService = require("../integrations/cloudinary.service.js");
 
 const REVIEW_WAIT_DAYS = 5;
 
@@ -108,6 +109,7 @@ const createReview = async (req) => {
   let review;
   let productName;
   let sellerUserId;
+  let uploadedPublicId = null;
 
   const transaction = await sequelize.transaction();
   try {
@@ -171,6 +173,16 @@ const createReview = async (req) => {
       throw AppError.fail("Seller not found.", 404);
     }
 
+    let imageUrl = null;
+    if (req.file) {
+      const uploaded = await cloudinaryService.uploadImage(
+        req.file.buffer,
+        "reviews",
+      );
+      imageUrl = uploaded.url;
+      uploadedPublicId = uploaded.publicId;
+    }
+
     review = await Review.create(
       {
         customerId: customer.id,
@@ -179,6 +191,8 @@ const createReview = async (req) => {
         orderId: order.id,
         rating: parsedRating,
         comment: comment?.trim() || null,
+        imageUrl,
+        publicId: uploadedPublicId,
       },
       { transaction },
     );
@@ -219,6 +233,16 @@ const createReview = async (req) => {
     await transaction.commit();
   } catch (error) {
     await transaction.rollback();
+    if (uploadedPublicId) {
+      await cloudinaryService
+        .deleteImage(uploadedPublicId)
+        .catch((err) =>
+          console.error(
+            `Failed to delete orphaned review image: ${uploadedPublicId}`,
+            err,
+          ),
+        );
+    }
     if (error.name === "SequelizeUniqueConstraintError") {
       throw AppError.fail("You have already reviewed this product.", 409);
     }
@@ -243,6 +267,7 @@ const createReview = async (req) => {
     orderId: review.orderId,
     rating: review.rating,
     comment: review.comment,
+    imageUrl: review.imageUrl,
     createdAt: review.createdAt,
   };
 };
@@ -289,7 +314,7 @@ const getSellerReviews = async (userId, query) => {
 
   const { count, rows } = await Review.findAndCountAll({
     where: where,
-    attributes: ["rating", "comment", ["created_at", "createdAt"]],
+    attributes: ["rating", "comment", "imageUrl", ["created_at", "createdAt"]],
     include: [
       {
         model: Customer,
