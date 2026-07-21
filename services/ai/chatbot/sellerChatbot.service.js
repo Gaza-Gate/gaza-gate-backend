@@ -80,17 +80,22 @@ const chat = async (userId, message, sessionId, file) => {
   const trimmedMessage = (message || "").trim();
 
   let session;
+  let messageCount;
+
   if (sessionId) {
-    session = await getSessionForSeller(sessionId, userId);
+    [session, messageCount] = await Promise.all([
+      getSessionForSeller(sessionId, userId),
+      getSessionMessageCount(sessionId),
+    ]);
   } else {
     session = await ChatbotRecord.create({
       userId,
       recordType: CHATBOT_RECORD_TYPES.SELLER_SESSION,
       content: buildSessionTitle(trimmedMessage || "Product image"),
     });
+    messageCount = 0;
   }
 
-  const messageCount = await getSessionMessageCount(session.id);
   if (messageCount >= SELLER_CHATBOT_LIMITS.MAX_MESSAGES_PER_SESSION) {
     throw AppError.fail(
       "This chat session has reached the maximum number of messages.",
@@ -98,19 +103,21 @@ const chat = async (userId, message, sessionId, file) => {
     );
   }
 
+  const history = sessionId ? await loadChatHistory(session.id) : [];
+
   let productImageReady = false;
   let uploadedImageUrl = null;
+  let uploadPromise = null;
 
   if (file) {
     const folder = `chatbot-products/${userId}`;
-    const uploaded = await cloudinaryService.uploadImage(file.buffer, folder);
     imageTokenService.setSessionImage(userId, session.id, {
       buffer: file.buffer,
       mimeType: file.mimetype,
-      imageUrl: uploaded.url,
+      imageUrl: null,
     });
     productImageReady = true;
-    uploadedImageUrl = uploaded.url;
+    uploadPromise = cloudinaryService.uploadImage(file.buffer, folder);
   } else {
     const pending = imageTokenService.getSessionImage(userId, session.id);
     productImageReady = !!pending;
@@ -128,18 +135,31 @@ const chat = async (userId, message, sessionId, file) => {
     content: displayMessage,
   });
 
-  const history = await loadChatHistory(session.id);
-  history.pop();
+  const agentContext = {
+    sessionId: session.id,
+    hasProductImage: productImageReady,
+  };
 
-  const agentResult = await sellerAiAgent.runAgent(
+  const agentPromise = sellerAiAgent.runAgent(
     userId,
     history,
     displayMessage,
-    {
-      sessionId: session.id,
-      hasProductImage: productImageReady,
-    },
+    agentContext,
   );
+
+  const [agentResult, uploaded] = await Promise.all([
+    agentPromise,
+    uploadPromise ?? Promise.resolve(null),
+  ]);
+
+  if (uploaded) {
+    uploadedImageUrl = uploaded.url;
+    imageTokenService.setSessionImage(userId, session.id, {
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+      imageUrl: uploaded.url,
+    });
+  }
 
   await ChatbotRecord.create({
     userId,

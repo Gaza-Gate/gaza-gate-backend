@@ -9,13 +9,14 @@ const {
   SELLER_CHATBOT_TOOLS,
 } = require("../../../constants/chatbot/sellerChatbot.constant.js");
 const ORDER_STATUSES = require("../../../constants/order/orderStatuses.constant.js");
+const USER_ROLES = require("../../../constants/user/userRoles.constant.js");
 const AppError = require("../../../utils/http/AppError.util.js");
 
 const buildSellerReq = (
   userId,
   { body = {}, params = {}, query = {}, file = null } = {},
 ) => ({
-  user: { id: userId },
+  user: { id: userId, role: USER_ROLES.SELLER },
   body,
   params,
   query,

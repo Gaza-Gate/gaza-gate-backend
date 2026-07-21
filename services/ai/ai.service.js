@@ -1,4 +1,5 @@
 const AI = require("../../constants/chatbot/ai.constant.js");
+const aiClient = require("./aiClient.service.js");
 const Seller = require("../../models/seller.model.js");
 const AppError = require("../../utils/http/AppError.util.js");
 const cloudinaryService = require("../integrations/cloudinary.service.js");
@@ -24,6 +25,67 @@ const buildPrompt = (customPrompt) => {
     : base;
 };
 
+const extractGeneratedImageUrl = (completion) => {
+  const message = completion?.choices?.[0]?.message;
+  if (!message) return null;
+
+  const fromImages = message.images?.[0]?.image_url?.url;
+  if (fromImages) return fromImages;
+
+  if (Array.isArray(message.content)) {
+    const imagePart = message.content.find(
+      (part) =>
+        part?.type === "image_url" &&
+        typeof part.image_url?.url === "string",
+    );
+    if (imagePart?.image_url?.url) return imagePart.image_url.url;
+  }
+
+  if (
+    typeof message.content === "string" &&
+    message.content.startsWith("data:")
+  ) {
+    return message.content;
+  }
+
+  return null;
+};
+
+const mapImageError = (error) => {
+  const status = error?.status;
+
+  if (status === 401 || status === 403) {
+    throw AppError.fail(
+      "AI image service authentication failed. Check AI_API_KEY and AI_BASE_URL.",
+      502,
+    );
+  }
+
+  if (status === 402) {
+    console.log(error);
+    throw AppError.fail(
+      "The AI image service has insufficient credits. Please top up your AI account.",
+      402,
+    );
+  }
+
+  if (status === 404) {
+    throw AppError.fail(
+      "AI image model not found. Check AI_IMAGE_MODEL in server config.",
+      502,
+    );
+  }
+
+  if (status === 429) {
+    throw AppError.fail(
+      "AI image service rate limit reached. Please try again shortly.",
+      429,
+    );
+  }
+
+  throw AppError.error("AI image generation failed. Please try again.", 502);
+};
+
 // Core call: takes a product image + identity image and returns the edited image as a Buffer.
 const runImageEdit = async ({
   productBuffer,
@@ -32,89 +94,55 @@ const runImageEdit = async ({
   identityMimeType,
   prompt,
 }) => {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
+  if (!aiClient.isAiEnabled()) {
     throw AppError.error("AI image service is not configured.", 500);
   }
 
-  const requestBody = {
-    model: AI.IMAGE_MODEL,
-    modalities: ["image", "text"],
-    max_tokens: AI.MAX_OUTPUT_TOKENS,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: buildPrompt(prompt) },
-          {
-            type: "image_url",
-            image_url: { url: bufferToDataUrl(productBuffer, productMimeType) },
-          },
-          {
-            type: "image_url",
-            image_url: {
-              url: bufferToDataUrl(identityBuffer, identityMimeType),
-            },
-          },
-        ],
-      },
-    ],
-  };
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AI.REQUEST_TIMEOUT_MS);
-
-  let response;
   try {
-    response = await fetch(AI.OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "X-Title": "Gaza Gate",
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
+    const completion = await aiClient.requestCompletion({
+      model: AI.IMAGE_MODEL,
+      modalities: ["image", "text"],
+      max_tokens: AI.MAX_OUTPUT_TOKENS,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: buildPrompt(prompt) },
+            {
+              type: "image_url",
+              image_url: {
+                url: bufferToDataUrl(productBuffer, productMimeType),
+              },
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: bufferToDataUrl(identityBuffer, identityMimeType),
+              },
+            },
+          ],
+        },
+      ],
     });
+
+    const generatedUrl = extractGeneratedImageUrl(completion);
+
+    if (!generatedUrl || !generatedUrl.startsWith("data:")) {
+      console.error(
+        "AI image unexpected response:",
+        JSON.stringify(completion)?.slice(0, 500),
+      );
+      throw AppError.error("AI image service returned no image.", 502);
+    }
+
+    const base64Data = generatedUrl.split(",")[1];
+    return Buffer.from(base64Data, "base64");
   } catch (error) {
-    if (error.name === "AbortError") {
-      throw AppError.error(
-        "AI image request timed out. Please try again.",
-        504,
-      );
-    }
-    throw AppError.error("Failed to reach the AI image service.", 502);
-  } finally {
-    clearTimeout(timeout);
+    if (error instanceof AppError) throw error;
+
+    console.error("AI image error:", error.status || error.message);
+    mapImageError(error);
   }
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    console.error("OpenRouter error:", response.status, errorText);
-
-    if (response.status === 402) {
-      throw AppError.fail(
-        "The AI image service has insufficient credits. Please top up the OpenRouter account.",
-        402,
-      );
-    }
-
-    throw AppError.error("AI image generation failed. Please try again.", 502);
-  }
-
-  const data = await response.json();
-  const generatedUrl = data?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-
-  if (!generatedUrl || !generatedUrl.startsWith("data:")) {
-    console.error(
-      "OpenRouter unexpected response:",
-      JSON.stringify(data)?.slice(0, 500),
-    );
-    throw AppError.error("AI image service returned no image.", 502);
-  }
-
-  const base64Data = generatedUrl.split(",")[1];
-  return Buffer.from(base64Data, "base64");
 };
 
 // Loads the single, site-wide visual identity image used to brand every product.
@@ -130,7 +158,7 @@ const fetchSiteIdentityImage = async () => {
   let response;
   try {
     response = await fetch(identityUrl);
-  } catch (error) {
+  } catch {
     throw AppError.error("Failed to load the site visual identity image.", 502);
   }
 

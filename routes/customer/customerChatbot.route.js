@@ -14,7 +14,6 @@ router.post(
   "/ask",
   authenticateAccessToken,
   allowedTo(userRoles.CUSTOMER),
-  filterBody(["question"]),
   chatbotValidator.askQuestionValidator,
   requestsValidator,
   asyncWrapper(customerChatbotController.askQuestion),

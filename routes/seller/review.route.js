@@ -1,15 +1,13 @@
 const router = require("express").Router();
 const reviewController = require("../../controllers/seller/review.controller");
 const authenticateAccessToken = require("../../middlewares/auth/verifyToken.middleware");
-<<<<<<< HEAD
 const requestsValidator = require("../../middlewares/validators/request.validator");
 const {
   replyToReviewValidator,
 } = require("../../middlewares/validators/review.validator");
-=======
 const allowedTo = require("../../middlewares/auth/allowedTo.middleware.js");
+
 const USER_ROLES = require("../../constants/user/userRoles.constant.js");
->>>>>>> 7b4b39027fcf7b6b06aead18efdec448861206e2
 
 router.get(
   "/",
