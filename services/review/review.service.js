@@ -4,6 +4,7 @@ const Seller = require("../../models/seller.model.js");
 const Customer = require("../../models/customer.model.js");
 const User = require("../../models/user.model.js");
 const Product = require("../../models/product.model.js");
+const ProductImage = require("../../models/productImage.model.js");
 const Order = require("../../models/order.model.js");
 const OrderItem = require("../../models/orderItem.model.js");
 const AppError = require("../../utils/http/AppError.util.js");
@@ -12,24 +13,89 @@ const ORDER_STATUSES = require("../../constants/order/orderStatuses.constant.js"
 const NOTIFICATION_TYPES = require("../../constants/notification/notificationTypes.constant.js");
 const notificationService = require("../notification/notification.service.js");
 const cloudinaryService = require("../integrations/cloudinary.service.js");
+const {
+  REVIEW_WAIT_DAYS,
+  REVIEW_EDIT_WINDOW_DAYS,
+  recalculateAverage,
+  replaceRating,
+  removeRating,
+  isAtLeastDaysOld,
+  isWithinEditWindow,
+  buildPagination,
+} = require("./review.helpers.js");
+const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
 
-const REVIEW_WAIT_DAYS = 5;
-
-const recalculateAverage = (currentAverage, currentCount, newRating) => {
-  const count = Number(currentCount) || 0;
-  const average = Number(currentAverage) || 0;
-  const nextCount = count + 1;
-  const nextAverage = (average * count + Number(newRating)) / nextCount;
-  return {
-    average: Number(nextAverage.toFixed(2)),
-    count: nextCount,
-  };
+const assertWithinEditWindow = (createdAt) => {
+  if (!isWithinEditWindow(createdAt)) {
+    throw AppError.fail(
+      `Reviews can only be edited or deleted within ${REVIEW_EDIT_WINDOW_DAYS} days of creation.`,
+      400,
+    );
+  }
 };
 
-const isAtLeastDaysOld = (date, days = REVIEW_WAIT_DAYS) => {
-  if (!date) return false;
-  const thresholdMs = days * 24 * 60 * 60 * 1000;
-  return Date.now() - new Date(date).getTime() >= thresholdMs;
+/** Ensures createdAt/updatedAt are available via review.get("createdAt") */
+const REVIEW_WRITE_ATTRIBUTES = [
+  "id",
+  "customerId",
+  "sellerId",
+  "productId",
+  "orderId",
+  "rating",
+  "comment",
+  "imageUrl",
+  "publicId",
+  "isDeleted",
+  ["created_at", "createdAt"],
+  ["updated_at", "updatedAt"],
+];
+
+const resolveCustomerFromRequest = async (req) => {
+  if (req.user?.role !== "customer") {
+    throw AppError.fail("Access denied.", 403);
+  }
+
+  const userId = req.user?.id || req.user?.userId;
+  if (!userId) {
+    throw AppError.fail("User authentication data is missing.", 401);
+  }
+
+  const customer = await Customer.findOne({
+    where: { userId },
+    attributes: ["id"],
+  });
+  if (!customer) {
+    throw AppError.fail("Customer not found.", 404);
+  }
+
+  return { userId, customer };
+};
+
+const primaryImageInclude = {
+  model: ProductImage,
+  as: "images",
+  attributes: ["imageUrl"],
+  where: { isPrimary: true },
+  required: false,
+  separate: true,
+};
+
+const getRatingDistribution = async (where) => {
+  const rows = await Review.findAll({
+    where: { ...where, isDeleted: false },
+    attributes: [
+      "rating",
+      [sequelize.fn("COUNT", sequelize.col("rating")), "count"],
+    ],
+    group: ["rating"],
+    raw: true,
+  });
+
+  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  rows.forEach((item) => {
+    distribution[item.rating] = parseInt(item.count, 10);
+  });
+  return distribution;
 };
 
 const assertOrderEligibleForReview = (order) => {
@@ -53,9 +119,6 @@ const assertOrderEligibleForReview = (order) => {
 
   const statusEnteredAt = statusEnteredAtByStatus[order.status];
   if (!statusEnteredAt || !isAtLeastDaysOld(statusEnteredAt)) {
-    console.log("DEBUG statusEnteredAt:", statusEnteredAt);
-    console.log("DEBUG isAtLeastDaysOld:", isAtLeastDaysOld(statusEnteredAt));
-
     throw AppError.fail(
       `This order is not eligible for review yet. It must remain in its current status for at least ${REVIEW_WAIT_DAYS} days.`,
       400,
@@ -110,6 +173,7 @@ const createReview = async (req) => {
   let productName;
   let sellerUserId;
   let uploadedPublicId = null;
+  let oldPublicIdToDelete = null;
 
   const transaction = await sequelize.transaction();
   try {
@@ -173,6 +237,10 @@ const createReview = async (req) => {
       throw AppError.fail("Seller not found.", 404);
     }
 
+    if (seller.userId === userId) {
+      throw AppError.fail("You cannot review your own product.", 400);
+    }
+
     let imageUrl = null;
     if (req.file) {
       const uploaded = await cloudinaryService.uploadImage(
@@ -183,19 +251,53 @@ const createReview = async (req) => {
       uploadedPublicId = uploaded.publicId;
     }
 
-    review = await Review.create(
-      {
+    const now = new Date();
+    const softDeletedReview = await Review.findOne({
+      where: {
         customerId: customer.id,
-        sellerId: seller.id,
         productId: product.id,
-        orderId: order.id,
-        rating: parsedRating,
-        comment: comment?.trim() || null,
-        imageUrl,
-        publicId: uploadedPublicId,
+        isDeleted: true,
       },
-      { transaction },
-    );
+      attributes: REVIEW_WRITE_ATTRIBUTES,
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (softDeletedReview) {
+      oldPublicIdToDelete = softDeletedReview.publicId || null;
+      await Review.update(
+        {
+          sellerId: seller.id,
+          orderId: order.id,
+          rating: parsedRating,
+          comment: comment?.trim() || null,
+          imageUrl,
+          publicId: uploadedPublicId,
+          isDeleted: false,
+          created_at: now,
+          updated_at: now,
+        },
+        { where: { id: softDeletedReview.id }, transaction },
+      );
+      review = await Review.findByPk(softDeletedReview.id, {
+        attributes: REVIEW_WRITE_ATTRIBUTES,
+        transaction,
+      });
+    } else {
+      review = await Review.create(
+        {
+          customerId: customer.id,
+          sellerId: seller.id,
+          productId: product.id,
+          orderId: order.id,
+          rating: parsedRating,
+          comment: comment?.trim() || null,
+          imageUrl,
+          publicId: uploadedPublicId,
+        },
+        { transaction },
+      );
+    }
 
     const productRating = recalculateAverage(
       product.averageRating,
@@ -249,6 +351,17 @@ const createReview = async (req) => {
     throw error;
   }
 
+  if (oldPublicIdToDelete && oldPublicIdToDelete !== uploadedPublicId) {
+    await cloudinaryService
+      .deleteImage(oldPublicIdToDelete)
+      .catch((err) =>
+        console.error(
+          `Failed to delete old review image: ${oldPublicIdToDelete}`,
+          err,
+        ),
+      );
+  }
+
   if (sellerUserId) {
     const stars = "★".repeat(parsedRating) + "☆".repeat(5 - parsedRating);
     await notificationService.notifySafely({
@@ -261,6 +374,8 @@ const createReview = async (req) => {
     });
   }
 
+  await review.reload({ attributes: REVIEW_WRITE_ATTRIBUTES });
+
   return {
     id: review.id,
     productId: review.productId,
@@ -268,28 +383,99 @@ const createReview = async (req) => {
     rating: review.rating,
     comment: review.comment,
     imageUrl: review.imageUrl,
-    createdAt: review.createdAt,
+    createdAt: review.get("createdAt"),
   };
 };
 
 const getSellerRatingStats = async (sellerId) => {
-  const rows = await Review.findAll({
-    where: { sellerId },
-    attributes: [
-      "rating",
-      [sequelize.fn("COUNT", sequelize.col("rating")), "count"],
-    ],
-    group: ["rating"],
-    raw: true,
+  return getRatingDistribution({ sellerId });
+};
+
+const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
+  const seller = await Seller.findOne({
+    where: { id: sellerId },
+    attributes: ["id", "rating", "ratingCount"],
+  });
+  if (!seller) {
+    throw AppError.fail("Seller not found.", 404);
+  }
+
+  const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
+  const limit = PAGINATION.DEFAULT_LIMIT;
+  const offset = (page - 1) * limit;
+
+  const where = { sellerId: seller.id, isDeleted: false };
+  const parsedRating = parseInt(query.rating, 10);
+  if (!isNaN(parsedRating) && parsedRating >= 1 && parsedRating <= 5) {
+    where.rating = parsedRating;
+  }
+
+  const [{ count, rows }, distribution] = await Promise.all([
+    Review.findAndCountAll({
+      where,
+      attributes: [
+        "id",
+        "rating",
+        "comment",
+        "imageUrl",
+        ["created_at", "createdAt"],
+      ],
+      include: [
+        {
+          model: Customer,
+          as: "customer",
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["firstName", "lastName", "avatar"],
+            },
+          ],
+        },
+        {
+          model: Product,
+          as: "product",
+          attributes: ["id", "name"],
+        },
+      ],
+      order: [["created_at", "DESC"]],
+      limit,
+      offset,
+      distinct: true,
+    }),
+    getSellerRatingStats(seller.id),
+  ]);
+
+  const reviews = rows.map((review) => {
+    const user = review.customer?.user;
+    return {
+      id: review.id,
+      rating: review.rating,
+      comment: review.comment,
+      imageUrl: review.imageUrl ?? null,
+      createdAt: review.get("createdAt"),
+      customer: user
+        ? {
+            id: review.customer.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            avatar: user.avatar,
+          }
+        : null,
+      product: review.product
+        ? { id: review.product.id, name: review.product.name }
+        : null,
+    };
   });
 
-  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-
-  rows.forEach((item) => {
-    distribution[item.rating] = parseInt(item.count);
-  });
-
-  return distribution;
+  return {
+    averageRating: seller.rating,
+    totalReviews: seller.ratingCount,
+    distribution,
+    reviews,
+    pagination: buildPagination(count, page, limit),
+  };
 };
 
 const getSellerReviews = async (userId, query) => {
@@ -297,67 +483,403 @@ const getSellerReviews = async (userId, query) => {
     throw AppError.fail("Seller authentication data is missing.", 401);
   const seller = await Seller.findOne({
     where: { userId },
-    attributes: ["id", "rating", "ratingCount"],
+    attributes: ["id"],
   });
+  if (!seller) {
+    throw AppError.fail("Seller not found.", 404);
+  }
+
+  return getSellerProductReviewsBySellerId(seller.id, query);
+};
+
+const getProductReviews = async (productId, query = {}) => {
+  const product = await Product.findOne({
+    where: { id: productId, isDeleted: false },
+    attributes: ["id", "averageRating", "reviewsCount"],
+  });
+  if (!product) {
+    throw AppError.fail("Product not found.", 404);
+  }
 
   const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
   const limit = PAGINATION.DEFAULT_LIMIT;
   const offset = (page - 1) * limit;
 
-  const where = { sellerId: seller.id };
-  const rating = query.rating;
-  const parsedRating = parseInt(rating);
-
+  const where = { productId: product.id, isDeleted: false };
+  const parsedRating = parseInt(query.rating, 10);
   if (!isNaN(parsedRating) && parsedRating >= 1 && parsedRating <= 5) {
     where.rating = parsedRating;
   }
 
+  const [{ count, rows }, distribution] = await Promise.all([
+    Review.findAndCountAll({
+      where,
+      attributes: [
+        "id",
+        "rating",
+        "comment",
+        "imageUrl",
+        ["created_at", "createdAt"],
+      ],
+      include: [
+        {
+          model: Customer,
+          as: "customer",
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["firstName", "lastName", "avatar"],
+            },
+          ],
+        },
+      ],
+      order: [["created_at", "DESC"]],
+      limit,
+      offset,
+      distinct: true,
+    }),
+    getRatingDistribution({ productId: product.id }),
+  ]);
+
+  const reviews = rows.map((review) => {
+    const user = review.customer?.user;
+    return {
+      id: review.id,
+      rating: review.rating,
+      comment: review.comment,
+      imageUrl: review.imageUrl ?? null,
+      createdAt: review.get("createdAt"),
+      customer: user
+        ? {
+            id: review.customer.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            avatar: user.avatar,
+          }
+        : null,
+    };
+  });
+
+  return {
+    averageRating: product.averageRating,
+    totalReviews: product.reviewsCount,
+    distribution,
+    reviews,
+    pagination: buildPagination(count, page, limit),
+  };
+};
+
+const getMyReviews = async (req) => {
+  const { customer } = await resolveCustomerFromRequest(req);
+  const query = req.query || {};
+
+  const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
+  const limit = PAGINATION.DEFAULT_LIMIT;
+  const offset = (page - 1) * limit;
+
   const { count, rows } = await Review.findAndCountAll({
-    where: where,
-    attributes: ["rating", "comment", "imageUrl", ["created_at", "createdAt"]],
+    where: { customerId: customer.id, isDeleted: false },
+    attributes: [
+      "id",
+      "rating",
+      "comment",
+      "imageUrl",
+      ["created_at", "createdAt"],
+    ],
     include: [
       {
-        model: Customer,
-        as: "customer",
-        attributes: ["id"],
+        model: Product,
+        as: "product",
+        attributes: ["id", "name"],
+        include: [primaryImageInclude],
+      },
+      {
+        model: Seller,
+        as: "seller",
+        attributes: ["id", "storeName"],
         include: [
           {
             model: User,
             as: "user",
-            attributes: ["firstName", "lastName", "avatar"],
+            attributes: ["avatar"],
           },
         ],
       },
-      {
-        model: Product,
-        as: "product",
-        attributes: ["name"],
-      },
     ],
     order: [["created_at", "DESC"]],
-    limit: limit,
-    offset: offset,
+    limit,
+    offset,
     distinct: true,
   });
 
-  const totalPages = Math.ceil(count / limit);
-
-  const distribution = await getSellerRatingStats(seller.id);
+  const reviews = rows.map((review) => {
+    const product = review.product;
+    return {
+      id: review.id,
+      rating: review.rating,
+      comment: review.comment,
+      imageUrl: review.imageUrl ?? null,
+      createdAt: review.get("createdAt"),
+      product: product
+        ? {
+            id: product.id,
+            name: product.name,
+            image: product.images?.[0]?.imageUrl ?? null,
+          }
+        : null,
+      seller: mapSellerSummary(review.seller, review.seller?.user),
+    };
+  });
 
   return {
-    averageRating: seller.rating,
-    totalReviews: seller.ratingCount,
-    distribution,
-    reviews: rows,
-    pagination: {
-      totalItems: count,
-      totalPages,
-      currentPage: page,
-      pageSize: limit,
-      hasNextPage: page < totalPages,
-      hasPreviousPage: page > 1,
-    },
+    reviews,
+    pagination: buildPagination(count, page, limit),
   };
 };
 
-module.exports = { createReview, getSellerReviews };
+const updateReview = async (req) => {
+  const { customer } = await resolveCustomerFromRequest(req);
+  const reviewId = req.params.id;
+  const { rating, comment } = req.body || {};
+
+  let uploadedPublicId = null;
+  let oldPublicIdToDelete = null;
+
+  const transaction = await sequelize.transaction();
+  try {
+    const review = await Review.findOne({
+      where: {
+        id: reviewId,
+        customerId: customer.id,
+        isDeleted: false,
+      },
+      attributes: REVIEW_WRITE_ATTRIBUTES,
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!review) {
+      throw AppError.fail("Review not found.", 404);
+    }
+
+    assertWithinEditWindow(review.get("createdAt"));
+
+    const hasRating = rating !== undefined && rating !== null && rating !== "";
+    const parsedRating = hasRating ? Number(rating) : null;
+    if (
+      hasRating &&
+      (!Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5)
+    ) {
+      throw AppError.fail("rating must be an integer between 1 and 5.", 400);
+    }
+
+    const oldRating = review.rating;
+    const nextRating = hasRating ? parsedRating : oldRating;
+    const ratingChanged = hasRating && nextRating !== oldRating;
+
+    if (ratingChanged) {
+      const product = await Product.findOne({
+        where: { id: review.productId, isDeleted: false },
+        attributes: ["id", "averageRating", "reviewsCount", "sellerId"],
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!product) {
+        throw AppError.fail("Product not found.", 404);
+      }
+
+      const seller = await Seller.findOne({
+        where: { id: product.sellerId },
+        attributes: ["id", "rating", "ratingCount"],
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!seller) {
+        throw AppError.fail("Seller not found.", 404);
+      }
+
+      const productRating = replaceRating(
+        product.averageRating,
+        product.reviewsCount,
+        oldRating,
+        nextRating,
+      );
+      await product.update(
+        {
+          averageRating: productRating.average,
+          reviewsCount: productRating.count,
+        },
+        { transaction },
+      );
+
+      const sellerRating = replaceRating(
+        seller.rating,
+        seller.ratingCount,
+        oldRating,
+        nextRating,
+      );
+      await seller.update(
+        {
+          rating: sellerRating.average,
+          ratingCount: sellerRating.count,
+        },
+        { transaction },
+      );
+    }
+
+    const updates = {};
+    if (hasRating) updates.rating = nextRating;
+    if (comment !== undefined) {
+      updates.comment =
+        comment === null || comment === "" ? null : String(comment).trim();
+    }
+
+    if (req.file) {
+      const uploaded = await cloudinaryService.uploadImage(
+        req.file.buffer,
+        "reviews",
+      );
+      uploadedPublicId = uploaded.publicId;
+      oldPublicIdToDelete = review.publicId;
+      updates.imageUrl = uploaded.url;
+      updates.publicId = uploaded.publicId;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      throw AppError.fail("No fields to update.", 400);
+    }
+
+    await review.update(updates, { transaction });
+    await review.reload({
+      attributes: REVIEW_WRITE_ATTRIBUTES,
+      transaction,
+    });
+    await transaction.commit();
+
+    if (oldPublicIdToDelete) {
+      await cloudinaryService
+        .deleteImage(oldPublicIdToDelete)
+        .catch((err) =>
+          console.error(
+            `Failed to delete old review image: ${oldPublicIdToDelete}`,
+            err,
+          ),
+        );
+    }
+
+    return {
+      id: review.id,
+      productId: review.productId,
+      orderId: review.orderId,
+      rating: review.rating,
+      comment: review.comment,
+      imageUrl: review.imageUrl,
+      createdAt: review.get("createdAt"),
+      updatedAt: review.get("updatedAt"),
+    };
+  } catch (error) {
+    await transaction.rollback();
+    if (uploadedPublicId) {
+      await cloudinaryService
+        .deleteImage(uploadedPublicId)
+        .catch((err) =>
+          console.error(
+            `Failed to delete orphaned review image: ${uploadedPublicId}`,
+            err,
+          ),
+        );
+    }
+    throw error;
+  }
+};
+
+const deleteReview = async (req) => {
+  const { customer } = await resolveCustomerFromRequest(req);
+  const reviewId = req.params.id;
+
+  const transaction = await sequelize.transaction();
+  try {
+    const review = await Review.findOne({
+      where: {
+        id: reviewId,
+        customerId: customer.id,
+        isDeleted: false,
+      },
+      attributes: REVIEW_WRITE_ATTRIBUTES,
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!review) {
+      throw AppError.fail("Review not found.", 404);
+    }
+
+    assertWithinEditWindow(review.get("createdAt"));
+
+    const product = await Product.findOne({
+      where: { id: review.productId, isDeleted: false },
+      attributes: ["id", "averageRating", "reviewsCount", "sellerId"],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!product) {
+      throw AppError.fail("Product not found.", 404);
+    }
+
+    const seller = await Seller.findOne({
+      where: { id: product.sellerId },
+      attributes: ["id", "rating", "ratingCount"],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!seller) {
+      throw AppError.fail("Seller not found.", 404);
+    }
+
+    const productRating = removeRating(
+      product.averageRating,
+      product.reviewsCount,
+      review.rating,
+    );
+    await product.update(
+      {
+        averageRating: productRating.average,
+        reviewsCount: productRating.count,
+      },
+      { transaction },
+    );
+
+    const sellerRating = removeRating(
+      seller.rating,
+      seller.ratingCount,
+      review.rating,
+    );
+    await seller.update(
+      {
+        rating: sellerRating.average,
+        ratingCount: sellerRating.count,
+      },
+      { transaction },
+    );
+
+    await review.update({ isDeleted: true }, { transaction });
+    await transaction.commit();
+
+    return { id: review.id, deleted: true };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+module.exports = {
+  createReview,
+  getSellerReviews,
+  getSellerProductReviewsBySellerId,
+  getProductReviews,
+  getMyReviews,
+  updateReview,
+  deleteReview,
+};

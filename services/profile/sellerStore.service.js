@@ -10,6 +10,10 @@ const AppError = require('../../utils/http/AppError.util');
 const PAGINATION = require('../../constants/shared/pagination.constant');
 const PRODUCT_STOCK_TYPES = require('../../constants/product/stockType.constant');
 const PRODUCT_STATUS = require('../../constants/product/productStatus.constant');
+const {
+  buildSellerStoreActionUrl,
+  mapSellerSummary,
+} = require('../../utils/navigation/sellerStoreLink.util');
 
 const PREVIEW_LIMIT = 4;
 
@@ -158,6 +162,8 @@ const getPublicStore = async (sellerId) => {
       storeDescription: seller.storeDescription,
       rating: seller.rating,
       ratingCount: seller.ratingCount,
+      actionUrl: buildSellerStoreActionUrl(seller.id),
+      avatar: seller.user?.avatar ?? null,
       user: {
         avatar: seller.user?.avatar ?? null,
       },
@@ -183,6 +189,13 @@ const getStoreProducts = async (sellerId, query) => {
   const seller = await Seller.findOne({
     where: { id: sellerId },
     attributes: ['id', 'storeName'],
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['avatar'],
+      },
+    ],
   });
   if (!seller) throw AppError.fail('Store not found.', 404);
 
@@ -205,6 +218,7 @@ const getStoreProducts = async (sellerId, query) => {
 
   return {
     storeName: seller.storeName,
+    store: mapSellerSummary(seller),
     products: rows.map(mapStoreProduct),
     pagination: {
       currentPage: page,

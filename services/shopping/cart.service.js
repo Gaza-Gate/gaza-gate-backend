@@ -5,11 +5,26 @@ const Product = require("../../models/product.model.js");
 const ProductImage = require("../../models/productImage.model.js");
 const Seller = require("../../models/seller.model.js");
 const Customer = require("../../models/customer.model.js");
+const User = require("../../models/user.model.js");
 const AppError = require("../../utils/http/AppError.util.js");
 const resolveCustomerIdFromRequest = require("../../utils/security/resolveCustomerIdFromRequest.util.js");
 const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const PRODUCT_STATUS = require("../../constants/product/productStatus.constant.js");
 const PRODUCT_STOCK_TYPES = require("../../constants/product/stockType.constant.js");
+const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+
+const sellerSummaryInclude = {
+  model: Seller,
+  as: "seller",
+  attributes: ["id", "storeName"],
+  include: [
+    {
+      model: User,
+      as: "user",
+      attributes: ["avatar"],
+    },
+  ],
+};
 
 const getCart = async (req) => {
   const customerId = await resolveCustomerIdFromRequest(req);
@@ -55,11 +70,7 @@ const getCart = async (req) => {
           "created_at",
         ],
         include: [
-          {
-            model: Seller,
-            as: "seller",
-            attributes: ["id", "storeName"],
-          },
+          sellerSummaryInclude,
           {
             model: ProductImage,
             as: "images",
@@ -94,9 +105,7 @@ const getCart = async (req) => {
             stockType: product.stockType,
             quantity: product.quantity,
             status: product.status,
-            seller: product.seller
-              ? { id: product.seller.id, storeName: product.seller.storeName }
-              : null,
+            seller: mapSellerSummary(product.seller),
             imageUrl: primaryImage?.imageUrl ?? null,
           }
         : null,
@@ -145,6 +154,7 @@ const addToCart = async (req) => {
       "quantity",
       "status",
       "isDeleted",
+      "sellerId",
     ],
   });
 
@@ -152,6 +162,17 @@ const addToCart = async (req) => {
     throw AppError.fail("Product not found.", 404);
   if (product.status !== PRODUCT_STATUS.ACTIVE)
     throw AppError.fail("Product is not available.", 400);
+
+  const customerUserId = req.user?.id || req.user?.userId;
+  if (customerUserId && product.sellerId) {
+    const seller = await Seller.findOne({
+      where: { id: product.sellerId },
+      attributes: ["id", "userId"],
+    });
+    if (seller && seller.userId === customerUserId) {
+      throw AppError.fail("You cannot order from your own store.", 400);
+    }
+  }
 
   // Validate stock availability
   if (product.stockType === PRODUCT_STOCK_TYPES.LIMITED) {
