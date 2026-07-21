@@ -586,6 +586,8 @@ const getMyReviews = async (req) => {
       "rating",
       "comment",
       "imageUrl",
+      "sellerReply",
+      "sellerRepliedAt",
       ["created_at", "createdAt"],
     ],
     include: [
@@ -874,6 +876,74 @@ const deleteReview = async (req) => {
   }
 };
 
+const replyToReview = async (userId, reviewId, reply) => {
+  if (!userId) {
+    throw AppError.fail("Seller authentication data is missing.", 401);
+  }
+
+  const seller = await Seller.findOne({
+    where: { userId },
+    attributes: ["id", "storeName"],
+  });
+  if (!seller) throw AppError.fail("Seller not found.", 404);
+
+  const review = await Review.findOne({
+    where: {
+      id: reviewId,
+      sellerId: seller.id,
+      isDeleted: false,
+    },
+    attributes: [
+      "id",
+      "sellerReply",
+      "productId",
+      "customerId",
+    ],
+    include: [
+      {
+        model: Product,
+        as: "product",
+        attributes: ["name"],
+      },
+      {
+        model: Customer,
+        as: "customer",
+        attributes: ["id", "userId"],
+      },
+    ],
+  });
+
+  if (!review) throw AppError.fail("Review not found.", 404);
+
+  const isFirstReply = !review.sellerReply;
+  const trimmedReply = reply.trim();
+  const repliedAt = new Date();
+
+  await review.update({
+    sellerReply: trimmedReply,
+    sellerRepliedAt: repliedAt,
+  });
+
+  if (isFirstReply && review.customer?.userId) {
+    const productName = review.product?.name ?? "your product";
+    await notificationService.notifySafely({
+      recipientUserIds: [review.customer.userId],
+      senderId: userId,
+      type: NOTIFICATION_TYPES.REVIEW,
+      title: "رد على تقييمك",
+      content: `رد ${seller.storeName} على تقييمك للمنتج "${productName}"`,
+      actionUrl: `/orders`,
+    });
+  }
+
+  return {
+    id: review.id,
+    sellerReply: trimmedReply,
+    sellerRepliedAt: repliedAt,
+  };
+};
+
+
 module.exports = {
   createReview,
   getSellerReviews,
@@ -882,4 +952,5 @@ module.exports = {
   getMyReviews,
   updateReview,
   deleteReview,
+  replyToReview,
 };

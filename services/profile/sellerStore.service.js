@@ -76,6 +76,8 @@ const mapReview = (review) => {
     rating: review.rating,
     comment: review.comment,
     imageUrl: review.imageUrl ?? null,
+    sellerReply: review.sellerReply ?? null,
+    sellerRepliedAt: review.sellerRepliedAt ?? null,
     createdAt: review.get('createdAt'),
     customer: user
       ? {
@@ -134,7 +136,15 @@ const getPublicStore = async (sellerId) => {
 
     Review.findAndCountAll({
       where: { sellerId: seller.id },
-      attributes: ['id', 'rating', 'comment', 'imageUrl', ['created_at', 'createdAt']],
+      attributes: [
+        'id',
+        'rating',
+        'comment',
+        'imageUrl',
+        'sellerReply',
+        'sellerRepliedAt',
+        ['created_at', 'createdAt'],
+      ],
       include: [
         {
           model: Customer,

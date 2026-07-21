@@ -22,9 +22,19 @@ const updateSellerCustomerReview = asyncWrapper(async (req, res) => {
   return apiResponse.sendSuccess(res, review, 200);
 });
 
+
 const deleteSellerCustomerReview = asyncWrapper(async (req, res) => {
   const result = await sellerCustomerReviewService.deleteSellerCustomerReview(
     req,
+  );
+  return apiResponse.sendSuccess(res, result, 200);
+});
+
+const replyToReview = asyncWrapper(async (req, res) => {
+  const result = await reviewService.replyToReview(
+    req.user.id,
+    req.params.id,
+    req.body.reply,
   );
   return apiResponse.sendSuccess(res, result, 200);
 });
@@ -42,4 +52,5 @@ module.exports = {
   updateSellerCustomerReview,
   deleteSellerCustomerReview,
   getMySellerCustomerReviews,
+  replyToReview,
 };

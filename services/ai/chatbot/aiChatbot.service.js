@@ -3,7 +3,7 @@ const fs = require("fs/promises");
 const path = require("path");
 
 const CANNOT_ANSWER_MARKER = "__CANNOT_ANSWER__";
-const KNOWLEDGE_BASE_PATH = path.join(__dirname, "..", "data", "knowledgeBase.md");
+const KNOWLEDGE_BASE_PATH = path.join(__dirname, "..", "..","data", "knowledgeBase.md");
 
 const getConfig = () => ({
   apiKey: process.env.OPENROUTER_API_KEY,
