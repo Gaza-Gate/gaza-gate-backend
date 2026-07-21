@@ -10,10 +10,15 @@ const {
   updateAddressValidator,
   addressIdValidator,
 } = require("../../middlewares/validators/customerProfile.validator.js");
+const {
+  customerIdParamValidator,
+} = require("../../middlewares/validators/publicCustomer.validator.js");
 const customerProfileController = require("../../controllers/customer/customerProfile.controller.js");
+const publicCustomerController = require("../../controllers/customer/publicCustomer.controller.js");
 
 const router = express.Router();
 
+// Private profile (own secure data) — static paths first
 router.get(
   "/customer",
   authenticateAccessToken,
@@ -56,6 +61,15 @@ router.delete(
   addressIdValidator,
   requestsValidator,
   customerProfileController.deleteAddress,
+);
+
+// Public profile (any authenticated user)
+router.get(
+  "/customer/:customerId",
+  authenticateAccessToken,
+  customerIdParamValidator,
+  requestsValidator,
+  publicCustomerController.getPublicCustomerProfile,
 );
 
 module.exports = router;

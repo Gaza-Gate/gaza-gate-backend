@@ -8,6 +8,7 @@ const Product = require("../../models/product.model.js");
 const ProductImage = require("../../models/productImage.model.js");
 const Seller = require("../../models/seller.model.js");
 const Address = require("../../models/address.model.js");
+const User = require("../../models/user.model.js");
 const AppError = require("../../utils/http/AppError.util.js");
 const ORDER_STATUSES = require("../../constants/order/orderStatuses.constant.js");
 const PAGINATION = require("../../constants/shared/pagination.constant.js");
@@ -15,6 +16,20 @@ const PRODUCT_STATUS = require("../../constants/product/productStatus.constant.j
 const PRODUCT_STOCK_TYPES = require("../../constants/product/stockType.constant.js");
 const NOTIFICATION_TYPES = require("../../constants/notification/notificationTypes.constant.js");
 const notificationService = require("../notification/notification.service.js");
+const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+
+const sellerSummaryInclude = {
+  model: Seller,
+  as: "seller",
+  attributes: ["id", "storeName"],
+  include: [
+    {
+      model: User,
+      as: "user",
+      attributes: ["avatar"],
+    },
+  ],
+};
 
 const generateOrderNumber = () => {
   const timestamp = Date.now().toString().slice(-6);
@@ -113,11 +128,23 @@ const createOrder = async (req) => {
     itemsBySeller[sellerId].push(item);
   }
 
+  const customerUserId = req.user?.id || req.user?.userId;
+  const sellerIds = Object.keys(itemsBySeller);
+  const sellers = await Seller.findAll({
+    where: { id: sellerIds },
+    attributes: ["id", "userId"],
+  });
+  for (const seller of sellers) {
+    if (seller.userId === customerUserId) {
+      throw AppError.fail("You cannot order from your own store.", 400);
+    }
+  }
+
   const createdOrders = [];
   const transaction = await sequelize.transaction();
 
   try {
-    for (const sellerId of Object.keys(itemsBySeller)) {
+    for (const sellerId of sellerIds) {
       const sellerItems = itemsBySeller[sellerId];
       let totalPrice = 0;
 
@@ -278,11 +305,7 @@ const getCustomerOrders = async (req) => {
   const { count, rows } = await Order.findAndCountAll({
     where,
     include: [
-      {
-        model: Seller,
-        as: "seller",
-        attributes: ["id", "storeName"],
-      },
+      sellerSummaryInclude,
       {
         model: OrderItem,
         as: "items",
@@ -319,9 +342,7 @@ const getCustomerOrders = async (req) => {
     paymentMethod: order.paymentMethod,
     createdAt: order.created_at,
     updatedAt: order.updated_at,
-    seller: order.seller
-      ? { id: order.seller.id, storeName: order.seller.storeName }
-      : null,
+    seller: mapSellerSummary(order.seller),
     items: (order.items || []).map((item) => ({
       id: item.id,
       productName: item.productName,
@@ -361,11 +382,7 @@ const getCustomerOrderDetails = async (req) => {
       isDeleted: false,
     },
     include: [
-      {
-        model: Seller,
-        as: "seller",
-        attributes: ["id", "storeName"],
-      },
+      sellerSummaryInclude,
       {
         model: OrderItem,
         as: "items",
@@ -404,9 +421,7 @@ const getCustomerOrderDetails = async (req) => {
       createdAt: order.created_at,
       updatedAt: order.updated_at,
       canCancel: order.status === ORDER_STATUSES.PENDING_REVIEW,
-      seller: order.seller
-        ? { id: order.seller.id, storeName: order.seller.storeName }
-        : null,
+      seller: mapSellerSummary(order.seller),
       items: (order.items || []).map((item) => ({
         id: item.id,
         productName: item.productName,

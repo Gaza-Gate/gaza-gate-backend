@@ -6,7 +6,11 @@
   "scripts": {
     "start": "nodemon server.js",
     "test": "jest",
-    "test:conversation": "jest tests/integration/conversation.api.test.js"
+    "test:conversation": "jest tests/integration/conversation.api.test.js",
+    "test:review": "jest tests/unit/review.helpers.test.js tests/unit/review.validator.test.js tests/integration/review.routes.test.js --runInBand",
+    "test:review:e2e": "jest tests/integration/review.e2e.test.js --runInBand",
+    "test:seller-review:e2e": "jest tests/integration/sellerReview.e2e.test.js --runInBand --forceExit",
+    "test:actionurl:e2e": "jest tests/unit/sellerStoreLink.util.test.js tests/integration/sellerStoreActionUrl.e2e.test.js --runInBand --forceExit"
   },
   "keywords": [],
   "author": "",

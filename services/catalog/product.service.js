@@ -6,6 +6,7 @@ const ProductImage = require("../../models/productImage.model.js");
 const Category = require("../../models/category.model.js");
 const Seller = require("../../models/seller.model.js");
 const Wishlist = require("../../models/wishlist.model.js");
+const User = require("../../models/user.model.js");
 const cloudinaryService = require("../integrations/cloudinary.service.js");
 const aiService = require("../ai/ai.service.js");
 const AppError = require("../../utils/http/AppError.util.js");
@@ -15,6 +16,20 @@ const PRODUCT_STATUS = require("../../constants/product/productStatus.constant.j
 const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const PUBLIC_SORT_OPTIONS = require("../../constants/shared/sort-options.constant.js");
 const USER_ROLES = require("../../constants/user/userRoles.constant.js");
+const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+
+const sellerSummaryInclude = {
+  model: Seller,
+  as: "seller",
+  attributes: ["id", "storeName"],
+  include: [
+    {
+      model: User,
+      as: "user",
+      attributes: ["avatar"],
+    },
+  ],
+};
 
 const getSellerIdFromRequest = (req) => {
   const userId = req.user?.id || req.user?.userId || null;
@@ -438,11 +453,7 @@ const getAllProductsPublic = async (req) => {
         as: "category",
         attributes: ["id", "name"],
       },
-      {
-        model: Seller,
-        as: "seller",
-        attributes: ["id", "storeName"],
-      },
+      sellerSummaryInclude,
       {
         model: ProductImage,
         as: "images",
@@ -471,7 +482,7 @@ const getAllProductsPublic = async (req) => {
       category: product.category
         ? { id: product.category.id, name: product.category.name }
         : null,
-      seller: product.seller ? { storeName: product.seller.storeName } : null,
+      seller: mapSellerSummary(product.seller),
       primaryImage: primaryImage ? { imageUrl: primaryImage.imageUrl } : null,
     };
   });
@@ -523,11 +534,7 @@ const getProductDetailsPublic = async (req) => {
         as: "category",
         attributes: ["id", "name"],
       },
-      {
-        model: Seller,
-        as: "seller",
-        attributes: ["id", "storeName"],
-      },
+      sellerSummaryInclude,
       {
         model: ProductImage,
         as: "images",
@@ -565,9 +572,7 @@ const getProductDetailsPublic = async (req) => {
       category: product.category
         ? { id: product.category.id, name: product.category.name }
         : null,
-      seller: product.seller
-        ? { id: product.seller.id, storeName: product.seller.storeName }
-        : null,
+      seller: mapSellerSummary(product.seller),
       images: (product.images || []).map((image) => ({
         id: image.id,
         imageUrl: image.imageUrl,

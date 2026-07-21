@@ -26,6 +26,7 @@ const apiResponse = require("./utils/http/apiResponse.util.js");
 const errorHandler = require("./middlewares/common/errorHandler.middleware.js");
 const adminCategoryRoute = require("./routes/admin/category.route.js");
 const sellerStoreRoute = require("./routes/customer/sellerStore.route.js");
+const sharedReviewRoute = require("./routes/shared/review.route.js");
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use("/api/order", orderRoute);
 app.use("/api/category", categoryRoute);
 app.use("/api/seller/review", reviewRoute);
 app.use("/api/customer/review", customerReviewRoute);
+app.use("/api/review", sharedReviewRoute);
 app.use("/api/seller/notification", notificationRoute);
 app.use("/api/customer/notification", customerNotificationRoute);
 app.use("/api/seller/profile", profileRoute);

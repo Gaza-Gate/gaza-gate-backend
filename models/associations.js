@@ -19,6 +19,7 @@ const OrderItem = require("./orderItem.model.js");
 const Notification = require("./notification.model.js");
 const UserNotification = require("./userNotification.model.js");
 const Review = require("./review.model.js");
+const SellerCustomerReview = require("./sellerCustomerReview.model.js");
 const Conversation = require("./conversation.model.js");
 const Message = require("./message.model.js");
 const ChatbotRecord = require("./chatbotRecord.model.js");
@@ -360,6 +361,42 @@ Review.belongsTo(Seller, {
   onUpdate: "CASCADE",
 });
 
+// ==================== SELLER → CUSTOMER REVIEWS ====================
+
+Seller.hasMany(SellerCustomerReview, {
+  foreignKey: { name: "sellerId", field: "seller_id" },
+  as: "customerReviews",
+});
+SellerCustomerReview.belongsTo(Seller, {
+  foreignKey: { name: "sellerId", field: "seller_id" },
+  as: "seller",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+
+Customer.hasMany(SellerCustomerReview, {
+  foreignKey: { name: "customerId", field: "customer_id" },
+  as: "sellerReviews",
+});
+SellerCustomerReview.belongsTo(Customer, {
+  foreignKey: { name: "customerId", field: "customer_id" },
+  as: "customer",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+
+Order.hasMany(SellerCustomerReview, {
+  foreignKey: { name: "orderId", field: "order_id" },
+  as: "sellerCustomerReviews",
+  onDelete: "RESTRICT",
+});
+SellerCustomerReview.belongsTo(Order, {
+  foreignKey: { name: "orderId", field: "order_id" },
+  as: "order",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+
 // ==================== CONVERSATIONS ====================
 
 User.hasMany(Conversation, {
@@ -497,6 +534,7 @@ module.exports = {
   Notification,
   UserNotification,
   Review,
+  SellerCustomerReview,
   Conversation,
   Message,
   ChatbotRecord,
