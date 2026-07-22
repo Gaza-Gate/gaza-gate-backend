@@ -12,6 +12,9 @@ const AppError = require("../../utils/http/AppError.util.js");
 const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const ORDER_STATUSES = require("../../constants/order/orderStatuses.constant.js");
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+const {
+  buildCustomerProfileActionUrl,
+} = require("../../utils/navigation/customerProfileLink.util.js");
 
 const RECENT_SELLER_REVIEWS_LIMIT = 3;
 const TOP_CATEGORIES_LIMIT = 3;
@@ -277,6 +280,7 @@ const getPublicCustomerProfile = async (customerId) => {
       avatar: user.avatar,
       memberSince: user.get("createdAt"),
       isTrustedBuyer,
+      actionUrl: buildCustomerProfileActionUrl(customer.id),
     },
     stats: {
       completedOrders: orderStats.completedOrders,

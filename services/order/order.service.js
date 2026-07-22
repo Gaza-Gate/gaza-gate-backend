@@ -17,6 +17,7 @@ const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const NOTIFICATION_TYPES = require("../../constants/notification/notificationTypes.constant.js");
 const notificationService = require("../notification/notification.service.js");
 const USER_ROLES = require("../../constants/user/userRoles.constant.js");
+const { mapCustomerSummary } = require("../../utils/navigation/customerProfileLink.util.js");
 
 const getSellerFromRequest = async (req) => {
   const userId = req.user?.id || req.user?.userId || null;
@@ -100,7 +101,7 @@ const getSellerOrders = async (req) => {
             {
               model: User,
               as: "user",
-              attributes: ["firstName", "lastName"],
+              attributes: ["firstName", "lastName", "avatar"],
             },
           ],
         },
@@ -120,13 +121,15 @@ const getSellerOrders = async (req) => {
   ]);
 
   const formattedOrders = rows.map((order) => {
-    const firstName = order.customer?.user?.firstName || "";
-    const lastName = order.customer?.user?.lastName || "";
+    const customer = mapCustomerSummary(order.customer, order.customer?.user);
+    const firstName = customer?.firstName || "";
+    const lastName = customer?.lastName || "";
 
     return {
       id: order.id,
       orderNumber: order.orderNumber,
       customerName: `${firstName} ${lastName}`.trim() || "عميل غير معروف",
+      customer,
       date: order.created_at,
       itemsCount: order.items ? order.items.length : 0,
       totalPrice: order.totalPrice,
@@ -169,7 +172,7 @@ const getOrderDetails = async (req) => {
           {
             model: User,
             as: "user",
-            attributes: ["firstName", "lastName", "phone"],
+            attributes: ["firstName", "lastName", "phone", "avatar"],
           },
         ],
       },
@@ -184,9 +187,19 @@ const getOrderDetails = async (req) => {
 
   const nextStatus = STATUS_TRANSITIONS[order.status] || null;
   const nextStatusLabel = nextStatus ? STATUS_LABELS[nextStatus] : null;
+  const customerSummary = mapCustomerSummary(order.customer, order.customer?.user);
+  const orderJson = order.toJSON();
 
   return {
-    order,
+    order: {
+      ...orderJson,
+      customer: customerSummary
+        ? {
+            ...customerSummary,
+            phone: order.customer?.user?.phone ?? null,
+          }
+        : null,
+    },
     workflow: {
       currentStatus: order.status,
       currentStatusLabel: STATUS_LABELS[order.status],
