@@ -424,6 +424,8 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
         "rating",
         "comment",
         "imageUrl",
+        'sellerReply',
+        'sellerRepliedAt',
         ["created_at", "createdAt"],
       ],
       include: [
@@ -459,6 +461,8 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
       rating: review.rating,
       comment: review.comment,
       imageUrl: review.imageUrl ?? null,
+      sellerReply:review.sellerReply ?? null,
+      sellerRepliedAt:review.sellerRepliedAt ?? null,
       createdAt: review.get("createdAt"),
       customer: mapCustomerSummary(review.customer, review.customer?.user),
       product: review.product
