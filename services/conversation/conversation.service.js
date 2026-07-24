@@ -14,6 +14,9 @@ const NOTIFICATION_TYPES = require("../../constants/notification/notificationTyp
 const AppError = require("../../utils/http/AppError.util.js");
 const { isUserInConversationRoom } = require("../../socket/utils/room.util.js");
 const { buildSellerStoreActionUrl } = require("../../utils/navigation/sellerStoreLink.util.js");
+const {
+  buildCustomerProfileActionUrl,
+} = require("../../utils/navigation/customerProfileLink.util.js");
 
 const getSocketUtils = () => require("../../config/socket.config.js");
 const getNotificationService = () =>
@@ -91,7 +94,10 @@ const loadConversationOrFail = async (conversationId) => {
   return conversation;
 };
 
-const buildOtherParty = (user, { storeName = null, sellerId = null } = {}) => {
+const buildOtherParty = (
+  user,
+  { storeName = null, sellerId = null, customerId = null } = {},
+) => {
   const otherParty = {
     id: user.id,
     firstName: user.firstName,
@@ -103,6 +109,11 @@ const buildOtherParty = (user, { storeName = null, sellerId = null } = {}) => {
   if (sellerId) {
     otherParty.sellerId = sellerId;
     otherParty.actionUrl = buildSellerStoreActionUrl(sellerId);
+  }
+
+  if (customerId) {
+    otherParty.customerId = customerId;
+    otherParty.actionUrl = buildCustomerProfileActionUrl(customerId);
   }
 
   return otherParty;
@@ -242,11 +253,15 @@ const mapConversationListItem = (
   userId,
   unreadCount,
   sellerByUserId,
+  customerByUserId,
 ) => {
   const isCustomer = isConversationCustomer(conversation, userId);
   const otherUser = isCustomer ? conversation.seller : conversation.customer;
   const sellerInfo = isCustomer
     ? sellerByUserId[conversation.sellerId] || null
+    : null;
+  const customerInfo = !isCustomer
+    ? customerByUserId[conversation.customerId] || null
     : null;
 
   return {
@@ -258,6 +273,7 @@ const mapConversationListItem = (
     otherParty: buildOtherParty(otherUser, {
       storeName: sellerInfo?.storeName || null,
       sellerId: sellerInfo?.id || null,
+      customerId: customerInfo?.id || null,
     }),
     lastMessage: conversation.lastMessage
       ? {
@@ -330,15 +346,32 @@ const listConversations = async (userId, role, query = {}) => {
     .filter((conversation) => isConversationCustomer(conversation, userId))
     .map((conversation) => conversation.sellerId);
 
-  const sellers = sellerUserIds.length
-    ? await Seller.findAll({
-        where: { userId: sellerUserIds },
-        attributes: ["id", "userId", "storeName"],
-      })
-    : [];
+  const customerUserIds = rows
+    .filter((conversation) => !isConversationCustomer(conversation, userId))
+    .map((conversation) => conversation.customerId);
+
+  const [sellers, customers] = await Promise.all([
+    sellerUserIds.length
+      ? Seller.findAll({
+          where: { userId: sellerUserIds },
+          attributes: ["id", "userId", "storeName"],
+        })
+      : Promise.resolve([]),
+    customerUserIds.length
+      ? Customer.findAll({
+          where: { userId: customerUserIds },
+          attributes: ["id", "userId"],
+        })
+      : Promise.resolve([]),
+  ]);
 
   const sellerByUserId = sellers.reduce((acc, seller) => {
     acc[seller.userId] = { id: seller.id, storeName: seller.storeName };
+    return acc;
+  }, {});
+
+  const customerByUserId = customers.reduce((acc, customer) => {
+    acc[customer.userId] = { id: customer.id };
     return acc;
   }, {});
 
@@ -350,6 +383,7 @@ const listConversations = async (userId, role, query = {}) => {
       userId,
       unreadByConversationId[conversation.id] || 0,
       sellerByUserId,
+      customerByUserId,
     ),
   );
 
@@ -418,6 +452,7 @@ const getOtherPartyForConversation = async (conversation, userId) => {
 
   let storeName = null;
   let sellerId = null;
+  let customerId = null;
   if (isCustomer) {
     const seller = await Seller.findOne({
       where: { userId: otherUserId },
@@ -425,9 +460,15 @@ const getOtherPartyForConversation = async (conversation, userId) => {
     });
     storeName = seller?.storeName || null;
     sellerId = seller?.id || null;
+  } else {
+    const customer = await Customer.findOne({
+      where: { userId: otherUserId },
+      attributes: ["id"],
+    });
+    customerId = customer?.id || null;
   }
 
-  return buildOtherParty(otherUser, { storeName, sellerId });
+  return buildOtherParty(otherUser, { storeName, sellerId, customerId });
 };
 
 const getConversation = async (userId, conversationId, query = {}) => {

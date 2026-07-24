@@ -309,7 +309,7 @@ const getCustomerOrders = async (req) => {
       {
         model: OrderItem,
         as: "items",
-        attributes: ["id", "productName", "unitPrice", "quantity", "lineTotal"],
+        attributes: ["id", "productId", "productName", "unitPrice", "quantity", "lineTotal"],
         include: [
           {
             model: Product,
@@ -345,6 +345,7 @@ const getCustomerOrders = async (req) => {
     seller: mapSellerSummary(order.seller),
     items: (order.items || []).map((item) => ({
       id: item.id,
+      productId: item.productId,
       productName: item.productName,
       unitPrice: Number(item.unitPrice),
       quantity: item.quantity,
@@ -386,7 +387,7 @@ const getCustomerOrderDetails = async (req) => {
       {
         model: OrderItem,
         as: "items",
-        attributes: ["id", "productName", "unitPrice", "quantity", "lineTotal"],
+        attributes: ["id", "productId", "productName", "unitPrice", "quantity", "lineTotal"],
         include: [
           {
             model: Product,
@@ -424,6 +425,7 @@ const getCustomerOrderDetails = async (req) => {
       seller: mapSellerSummary(order.seller),
       items: (order.items || []).map((item) => ({
         id: item.id,
+        productId: item.productId,
         productName: item.productName,
         unitPrice: Number(item.unitPrice),
         quantity: item.quantity,

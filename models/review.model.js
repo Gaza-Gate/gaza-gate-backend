@@ -26,7 +26,7 @@ const Review = sequelize.define(
     },
     orderId: {
       type: DataTypes.UUID,
-      allowNull: true,
+      allowNull: false,
       field: "order_id",
     },
     rating: {
@@ -39,7 +39,7 @@ const Review = sequelize.define(
     },
     comment: {
       type: DataTypes.TEXT,
-      allowNull: true,
+      allowNull: false,
     },
     imageUrl: {
       type: DataTypes.STRING(512),

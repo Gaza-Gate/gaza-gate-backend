@@ -30,9 +30,15 @@ const createReviewValidator = [
     .isInt({ min: 1, max: 5 })
     .withMessage("rating must be an integer between 1 and 5"),
   body("comment")
-    .optional({ nullable: true })
+    .exists({ checkNull: true })
+    .withMessage("comment is required")
+    .bail()
     .isString()
     .withMessage("comment must be a string")
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage("comment is required")
     .isLength({ max: 2000 })
     .withMessage("comment must be at most 2000 characters"),
   optionalReviewImageValidator,
@@ -45,9 +51,16 @@ const updateReviewValidator = [
     .isInt({ min: 1, max: 5 })
     .withMessage("rating must be an integer between 1 and 5"),
   body("comment")
-    .optional({ nullable: true })
+    .optional({ values: "undefined" })
+    .exists({ checkNull: true })
+    .withMessage("comment cannot be null")
+    .bail()
     .isString()
     .withMessage("comment must be a string")
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage("comment cannot be empty")
     .isLength({ max: 2000 })
     .withMessage("comment must be at most 2000 characters"),
   optionalReviewImageValidator,

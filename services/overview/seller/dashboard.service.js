@@ -10,6 +10,7 @@ const Address = require("../../../models/address.model.js");
 const AppError = require("../../../utils/http/AppError.util.js");
 const Order = require("../../../models/order.model.js");
 const ORDER_STATUSES = require("../../../constants/order/orderStatuses.constant.js");
+const { mapCustomerSummary } = require("../../../utils/navigation/customerProfileLink.util.js");
 
 const getDashboard = async (userId) => {
   const seller = await Seller.findOne({
@@ -67,13 +68,19 @@ const getDashboard = async (userId) => {
     distribution[item.rating] = parseInt(item.count);
   });
 
-  const formattedReviews = reviews.map((r) => ({
-    customerName: `${r.customer.user.firstName} ${r.customer.user.lastName}`,
-    avatar: r.customer.user.avatar,
-    rating: r.rating,
-    comment: r.comment,
-    date: r.dataValues.createdAt.toISOString().split("T")[0],
-  }));
+  const formattedReviews = reviews.map((r) => {
+    const customer = mapCustomerSummary(r.customer, r.customer?.user);
+    return {
+      customerName: customer
+        ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim()
+        : "",
+      avatar: customer?.avatar ?? null,
+      customer,
+      rating: r.rating,
+      comment: r.comment,
+      date: r.dataValues.createdAt.toISOString().split("T")[0],
+    };
+  });
 
   const recentOrders = await Order.findAll({
     where: { sellerId: seller.id },
@@ -93,7 +100,7 @@ const getDashboard = async (userId) => {
           {
             model: User,
             as: "user",
-            attributes: ["firstName", "lastName"],
+            attributes: ["firstName", "lastName", "avatar"],
           },
         ],
       },
@@ -103,10 +110,14 @@ const getDashboard = async (userId) => {
   });
 
   const formattedRecentOrders = recentOrders.map((order) => {
+    const customer = mapCustomerSummary(order.customer, order.customer?.user);
     return {
       id: order.id,
       orderNumber: order.orderNumber,
-      customerName: `${order.customer.user.firstName} ${order.customer.user.lastName}`,
+      customerName: customer
+        ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim()
+        : "",
+      customer,
       status: order.status,
       total: order.totalPrice,
     };

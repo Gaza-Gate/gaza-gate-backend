@@ -24,6 +24,7 @@ const {
   buildPagination,
 } = require("./review.helpers.js");
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+const { mapCustomerSummary } = require("../../utils/navigation/customerProfileLink.util.js");
 
 const assertWithinEditWindow = (createdAt) => {
   if (!isWithinEditWindow(createdAt)) {
@@ -144,6 +145,11 @@ const createReview = async (req) => {
   }
   if (!orderId) {
     throw AppError.fail("orderId is required.", 400);
+  }
+  const trimmedComment =
+    typeof comment === "string" ? comment.trim() : "";
+  if (!trimmedComment) {
+    throw AppError.fail("comment is required.", 400);
   }
   if (!Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
     throw AppError.fail("rating must be an integer between 1 and 5.", 400);
@@ -270,7 +276,7 @@ const createReview = async (req) => {
           sellerId: seller.id,
           orderId: order.id,
           rating: parsedRating,
-          comment: comment?.trim() || null,
+          comment: trimmedComment,
           imageUrl,
           publicId: uploadedPublicId,
           isDeleted: false,
@@ -291,7 +297,7 @@ const createReview = async (req) => {
           productId: product.id,
           orderId: order.id,
           rating: parsedRating,
-          comment: comment?.trim() || null,
+          comment: trimmedComment,
           imageUrl,
           publicId: uploadedPublicId,
         },
@@ -418,6 +424,8 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
         "rating",
         "comment",
         "imageUrl",
+        'sellerReply',
+        'sellerRepliedAt',
         ["created_at", "createdAt"],
       ],
       include: [
@@ -448,21 +456,15 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
   ]);
 
   const reviews = rows.map((review) => {
-    const user = review.customer?.user;
     return {
       id: review.id,
       rating: review.rating,
       comment: review.comment,
       imageUrl: review.imageUrl ?? null,
+      sellerReply:review.sellerReply ?? null,
+      sellerRepliedAt:review.sellerRepliedAt ?? null,
       createdAt: review.get("createdAt"),
-      customer: user
-        ? {
-            id: review.customer.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            avatar: user.avatar,
-          }
-        : null,
+      customer: mapCustomerSummary(review.customer, review.customer?.user),
       product: review.product
         ? { id: review.product.id, name: review.product.name }
         : null,
@@ -544,21 +546,13 @@ const getProductReviews = async (productId, query = {}) => {
   ]);
 
   const reviews = rows.map((review) => {
-    const user = review.customer?.user;
     return {
       id: review.id,
       rating: review.rating,
       comment: review.comment,
       imageUrl: review.imageUrl ?? null,
       createdAt: review.get("createdAt"),
-      customer: user
-        ? {
-            id: review.customer.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            avatar: user.avatar,
-          }
-        : null,
+      customer: mapCustomerSummary(review.customer, review.customer?.user),
     };
   });
 
@@ -734,8 +728,12 @@ const updateReview = async (req) => {
     const updates = {};
     if (hasRating) updates.rating = nextRating;
     if (comment !== undefined) {
-      updates.comment =
-        comment === null || comment === "" ? null : String(comment).trim();
+      const nextComment =
+        typeof comment === "string" ? comment.trim() : "";
+      if (!nextComment) {
+        throw AppError.fail("comment cannot be empty.", 400);
+      }
+      updates.comment = nextComment;
     }
 
     if (req.file) {

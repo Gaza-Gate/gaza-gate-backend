@@ -14,6 +14,7 @@ const {
   buildSellerStoreActionUrl,
   mapSellerSummary,
 } = require('../../utils/navigation/sellerStoreLink.util');
+const { mapCustomerSummary } = require('../../utils/navigation/customerProfileLink.util');
 
 const PREVIEW_LIMIT = 4;
 
@@ -70,7 +71,6 @@ const mapPreviewProduct = (product) => ({
 });
 
 const mapReview = (review) => {
-  const user = review.customer?.user;
   return {
     id: review.id,
     rating: review.rating,
@@ -79,14 +79,7 @@ const mapReview = (review) => {
     sellerReply: review.sellerReply ?? null,
     sellerRepliedAt: review.sellerRepliedAt ?? null,
     createdAt: review.get('createdAt'),
-    customer: user
-      ? {
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          avatar: user.avatar,
-        }
-      : null,
+    customer: mapCustomerSummary(review.customer, review.customer?.user),
   };
 };
 
@@ -189,7 +182,7 @@ const getPublicStore = async (sellerId) => {
     reviews: {
       average:      seller.rating,
       total:        seller.ratingCount,
-      list:         reviews,
+      list:         reviews.map(mapReview),
       hasMore:      reviewsTotal > reviewsLimit
     },
   };

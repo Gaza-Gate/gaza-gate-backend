@@ -16,6 +16,7 @@ const {
   buildPagination,
 } = require("./review.helpers.js");
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+const { mapCustomerSummary } = require("../../utils/navigation/customerProfileLink.util.js");
 
 const primaryImageInclude = {
   model: ProductImage,
@@ -126,14 +127,7 @@ const mapMySellerCustomerReview = (review) => {
     rating: review.rating,
     comment: review.comment,
     createdAt: review.get("createdAt"),
-    customer: customer
-      ? {
-          id: customer.id,
-          firstName: customerUser?.firstName ?? null,
-          lastName: customerUser?.lastName ?? null,
-          avatar: customerUser?.avatar ?? null,
-        }
-      : null,
+    customer: mapCustomerSummary(customer, customerUser),
     order: review.order
       ? {
           id: review.order.id,
