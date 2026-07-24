@@ -14,12 +14,14 @@ const ORDER_STATUSES = require("../../constants/order/orderStatuses.constant.js"
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
 const {
   buildCustomerProfileActionUrl,
+  computeIsTrustedBuyer,
 } = require("../../utils/navigation/customerProfileLink.util.js");
+const {
+  getSellersOrderTrustStats,
+} = require("../../utils/navigation/sellerTrustStats.util.js");
 
 const RECENT_SELLER_REVIEWS_LIMIT = 3;
 const TOP_CATEGORIES_LIMIT = 3;
-const TRUSTED_MIN_COMPLETION_RATE = 90;
-const TRUSTED_MIN_COMPLETED_ORDERS = 5;
 
 const primaryImageInclude = {
   model: ProductImage,
@@ -40,7 +42,7 @@ const reviewProductInclude = {
 const reviewSellerInclude = {
   model: Seller,
   as: "seller",
-  attributes: ["id", "storeName"],
+  attributes: ["id", "storeName", "rating", "ratingCount"],
   include: [
     {
       model: User,
@@ -75,7 +77,7 @@ const findPublicCustomer = async (customerId) => {
   return customer;
 };
 
-const mapCustomerReview = (review) => {
+const mapCustomerReview = (review, orderTrust = null) => {
   const product = review.product;
   return {
     id: review.id,
@@ -90,7 +92,11 @@ const mapCustomerReview = (review) => {
           image: product.images?.[0]?.imageUrl ?? null,
         }
       : null,
-    seller: mapSellerSummary(review.seller, review.seller?.user),
+    seller: mapSellerSummary(
+      review.seller,
+      review.seller?.user,
+      orderTrust,
+    ),
   };
 };
 
@@ -105,7 +111,7 @@ const mapProductFromOrder = (order) => {
   };
 };
 
-const mapSellerReviewPreview = (review) => {
+const mapSellerReviewPreview = (review, orderTrust = null) => {
   const seller = review.seller;
   const sellerUser = seller?.user;
 
@@ -114,7 +120,7 @@ const mapSellerReviewPreview = (review) => {
     rating: review.rating,
     comment: review.comment,
     createdAt: review.get("createdAt"),
-    seller: mapSellerSummary(seller, sellerUser),
+    seller: mapSellerSummary(seller, sellerUser, orderTrust),
     product: mapProductFromOrder(review.order),
   };
 };
@@ -216,7 +222,7 @@ const getSellerReviewsPreview = async (customerId) => {
       {
         model: Seller,
         as: "seller",
-        attributes: ["id", "storeName"],
+        attributes: ["id", "storeName", "rating", "ratingCount"],
         include: [
           {
             model: User,
@@ -253,7 +259,13 @@ const getSellerReviewsPreview = async (customerId) => {
     limit: RECENT_SELLER_REVIEWS_LIMIT,
   });
 
-  return rows.map(mapSellerReviewPreview);
+  const trustBySellerId = await getSellersOrderTrustStats(
+    rows.map((review) => review.seller?.id).filter(Boolean),
+  );
+
+  return rows.map((review) =>
+    mapSellerReviewPreview(review, trustBySellerId.get(review.seller?.id)),
+  );
 };
 
 const getPublicCustomerProfile = async (customerId) => {
@@ -268,9 +280,7 @@ const getPublicCustomerProfile = async (customerId) => {
       getSellerReviewsPreview(customer.id),
     ]);
 
-  const isTrustedBuyer =
-    orderStats.completionRate >= TRUSTED_MIN_COMPLETION_RATE &&
-    orderStats.completedOrders >= TRUSTED_MIN_COMPLETED_ORDERS;
+  const isTrustedBuyer = computeIsTrustedBuyer(orderStats);
 
   return {
     customer: {
@@ -325,8 +335,14 @@ const getPublicCustomerReviews = async (customerId, query = {}) => {
 
   const totalPages = Math.ceil(count / limit);
 
+  const trustBySellerId = await getSellersOrderTrustStats(
+    rows.map((review) => review.seller?.id).filter(Boolean),
+  );
+
   return {
-    reviews: rows.map(mapCustomerReview),
+    reviews: rows.map((review) =>
+      mapCustomerReview(review, trustBySellerId.get(review.seller?.id)),
+    ),
     pagination: {
       totalItems: count,
       totalPages,

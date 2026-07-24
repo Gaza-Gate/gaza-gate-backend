@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon server.js"
+    "start": "nodemon server.js",
+    "test": "jest",
+    "test:trusted-seller": "jest tests/unit/sellerStoreLink.util.test.js tests/integration/trustedSeller.e2e.test.js --runInBand --forceExit",
+    "test:trusted-buyer": "jest tests/unit/customerProfileLink.util.test.js tests/integration/trustedBuyer.e2e.test.js --runInBand --forceExit"
   },
   "keywords": [],
   "author": "",

@@ -11,6 +11,9 @@ const AppError = require("../../../utils/http/AppError.util.js");
 const Order = require("../../../models/order.model.js");
 const ORDER_STATUSES = require("../../../constants/order/orderStatuses.constant.js");
 const { mapCustomerSummary } = require("../../../utils/navigation/customerProfileLink.util.js");
+const {
+  getCustomersOrderTrustStats,
+} = require("../../../utils/navigation/customerTrustStats.util.js");
 
 const getDashboard = async (userId) => {
   const seller = await Seller.findOne({
@@ -68,8 +71,16 @@ const getDashboard = async (userId) => {
     distribution[item.rating] = parseInt(item.count);
   });
 
+  const reviewTrustByCustomerId = await getCustomersOrderTrustStats(
+    reviews.map((r) => r.customer?.id).filter(Boolean),
+  );
+
   const formattedReviews = reviews.map((r) => {
-    const customer = mapCustomerSummary(r.customer, r.customer?.user);
+    const customer = mapCustomerSummary(
+      r.customer,
+      r.customer?.user,
+      reviewTrustByCustomerId.get(r.customer?.id),
+    );
     return {
       customerName: customer
         ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim()
@@ -109,8 +120,16 @@ const getDashboard = async (userId) => {
     limit: 3,
   });
 
+  const orderTrustByCustomerId = await getCustomersOrderTrustStats(
+    recentOrders.map((order) => order.customer?.id).filter(Boolean),
+  );
+
   const formattedRecentOrders = recentOrders.map((order) => {
-    const customer = mapCustomerSummary(order.customer, order.customer?.user);
+    const customer = mapCustomerSummary(
+      order.customer,
+      order.customer?.user,
+      orderTrustByCustomerId.get(order.customer?.id),
+    );
     return {
       id: order.id,
       orderNumber: order.orderNumber,

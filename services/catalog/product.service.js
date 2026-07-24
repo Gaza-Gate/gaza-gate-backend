@@ -5,8 +5,10 @@ const Product = require("../../models/product.model.js");
 const ProductImage = require("../../models/productImage.model.js");
 const Category = require("../../models/category.model.js");
 const Seller = require("../../models/seller.model.js");
+const Customer = require("../../models/customer.model.js");
 const Wishlist = require("../../models/wishlist.model.js");
 const User = require("../../models/user.model.js");
+const Review = require("../../models/review.model.js");
 const cloudinaryService = require("../integrations/cloudinary.service.js");
 const aiService = require("../ai/ai.service.js");
 const AppError = require("../../utils/http/AppError.util.js");
@@ -17,11 +19,21 @@ const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const PUBLIC_SORT_OPTIONS = require("../../constants/shared/sort-options.constant.js");
 const USER_ROLES = require("../../constants/user/userRoles.constant.js");
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+const { mapCustomerSummary } = require("../../utils/navigation/customerProfileLink.util.js");
+const {
+  getSellersOrderTrustStats,
+  getSellerOrderTrustStats,
+} = require("../../utils/navigation/sellerTrustStats.util.js");
+const {
+  getCustomersOrderTrustStats,
+} = require("../../utils/navigation/customerTrustStats.util.js");
+
+const RECENT_REVIEWS_LIMIT = 3;
 
 const sellerSummaryInclude = {
   model: Seller,
   as: "seller",
-  attributes: ["id", "storeName"],
+  attributes: ["id", "storeName", "rating", "ratingCount"],
   include: [
     {
       model: User,
@@ -29,6 +41,68 @@ const sellerSummaryInclude = {
       attributes: ["avatar"],
     },
   ],
+};
+
+const mapProductReviewPreview = (review, orderTrust = null) => ({
+  id: review.id,
+  rating: review.rating,
+  comment: review.comment,
+  imageUrl: review.imageUrl ?? null,
+  createdAt: review.get("createdAt"),
+  customer: mapCustomerSummary(
+    review.customer,
+    review.customer?.user,
+    orderTrust,
+  ),
+});
+
+const getProductReviewsPreview = async (productId) => {
+  const rows = await Review.findAll({
+    where: { productId, isDeleted: false },
+    attributes: [
+      "id",
+      "rating",
+      "comment",
+      "imageUrl",
+      ["created_at", "createdAt"],
+    ],
+    include: [
+      {
+        model: Customer,
+        as: "customer",
+        attributes: ["id"],
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["firstName", "lastName", "avatar"],
+          },
+        ],
+      },
+    ],
+    order: [["created_at", "DESC"]],
+    limit: RECENT_REVIEWS_LIMIT,
+  });
+
+  const trustByCustomerId = await getCustomersOrderTrustStats(
+    rows.map((review) => review.customer?.id).filter(Boolean),
+  );
+
+  return rows.map((review) =>
+    mapProductReviewPreview(
+      review,
+      trustByCustomerId.get(review.customer?.id),
+    ),
+  );
+};
+
+const buildReviewsBlock = async (product) => {
+  const preview = await getProductReviewsPreview(product.id);
+  return {
+    average: product.averageRating,
+    total: product.reviewsCount,
+    preview,
+  };
 };
 
 const getSellerIdFromRequest = (req) => {
@@ -468,6 +542,10 @@ const getAllProductsPublic = async (req) => {
     distinct: true,
   });
 
+  const trustBySellerId = await getSellersOrderTrustStats(
+    rows.map((product) => product.seller?.id).filter(Boolean),
+  );
+
   const products = rows.map((product) => {
     const primaryImage = product.images?.[0];
 
@@ -482,7 +560,11 @@ const getAllProductsPublic = async (req) => {
       category: product.category
         ? { id: product.category.id, name: product.category.name }
         : null,
-      seller: mapSellerSummary(product.seller),
+      seller: mapSellerSummary(
+        product.seller,
+        null,
+        trustBySellerId.get(product.seller?.id),
+      ),
       primaryImage: primaryImage ? { imageUrl: primaryImage.imageUrl } : null,
     };
   });
@@ -558,6 +640,9 @@ const getProductDetailsPublic = async (req) => {
     isWishlisted = !!wishlistItem;
   }
 
+  const reviews = await buildReviewsBlock(product);
+  const orderTrust = await getSellerOrderTrustStats(product.seller?.id);
+
   return {
     product: {
       id: product.id,
@@ -572,7 +657,7 @@ const getProductDetailsPublic = async (req) => {
       category: product.category
         ? { id: product.category.id, name: product.category.name }
         : null,
-      seller: mapSellerSummary(product.seller),
+      seller: mapSellerSummary(product.seller, null, orderTrust),
       images: (product.images || []).map((image) => ({
         id: image.id,
         imageUrl: image.imageUrl,
@@ -581,11 +666,98 @@ const getProductDetailsPublic = async (req) => {
       })),
       isWishlisted,
     },
+    reviews,
+  };
+};
+
+const getSellerProductDetails = async (req) => {
+  const userId = getSellerIdFromRequest(req);
+  if (!userId) {
+    throw AppError.fail("Seller authentication data is missing.", 401);
+  }
+
+  const { id } = req.params;
+  if (!uuidValidate(id, 4)) {
+    throw AppError.fail("Invalid product ID.", 400);
+  }
+
+  const seller = await Seller.findOne({
+    where: { userId },
+    attributes: ["id"],
+  });
+  if (!seller) throw AppError.fail("Seller not found.", 404);
+
+  const product = await Product.findOne({
+    where: {
+      id,
+      sellerId: seller.id,
+      isDeleted: false,
+    },
+    attributes: [
+      "id",
+      "name",
+      "description",
+      "price",
+      "stockType",
+      "quantity",
+      "status",
+      "averageRating",
+      "reviewsCount",
+      ["created_at", "createdAt"],
+      ["updated_at", "updatedAt"],
+    ],
+    include: [
+      {
+        model: Category,
+        as: "category",
+        attributes: ["id", "name"],
+      },
+      {
+        model: ProductImage,
+        as: "images",
+        attributes: ["id", "imageUrl", "isPrimary", "position"],
+        separate: true,
+        order: [["position", "ASC"]],
+      },
+    ],
+  });
+
+  if (!product) {
+    throw AppError.fail("Product not found.", 404);
+  }
+
+  const reviews = await buildReviewsBlock(product);
+
+  return {
+    product: {
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      stockType: product.stockType,
+      quantity: product.quantity,
+      status: product.status,
+      averageRating: product.averageRating,
+      reviewsCount: product.reviewsCount,
+      createdAt: product.get("createdAt"),
+      updatedAt: product.get("updatedAt"),
+      category: product.category
+        ? { id: product.category.id, name: product.category.name }
+        : null,
+      images: (product.images || []).map((image) => ({
+        id: image.id,
+        imageUrl: image.imageUrl,
+        isPrimary: image.isPrimary,
+        position: image.position,
+      })),
+    },
+    reviews,
   };
 };
 
 module.exports = {
   getSellerProducts,
+  getSellerProductDetails,
   createProduct,
   updateProduct,
   toggleStatus,

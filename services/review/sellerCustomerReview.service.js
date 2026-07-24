@@ -17,6 +17,12 @@ const {
 } = require("./review.helpers.js");
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
 const { mapCustomerSummary } = require("../../utils/navigation/customerProfileLink.util.js");
+const {
+  getSellersOrderTrustStats,
+} = require("../../utils/navigation/sellerTrustStats.util.js");
+const {
+  getCustomersOrderTrustStats,
+} = require("../../utils/navigation/customerTrustStats.util.js");
 
 const primaryImageInclude = {
   model: ProductImage,
@@ -90,7 +96,7 @@ const resolveCustomerFromRequest = async (req) => {
   return { userId, customer };
 };
 
-const mapSellerCustomerReview = (review) => {
+const mapSellerCustomerReview = (review, orderTrust = null) => {
   const seller = review.seller;
   const sellerUser = seller?.user;
   const item = review.order?.items?.[0];
@@ -100,7 +106,7 @@ const mapSellerCustomerReview = (review) => {
     rating: review.rating,
     comment: review.comment,
     createdAt: review.get("createdAt"),
-    seller: mapSellerSummary(seller, sellerUser),
+    seller: mapSellerSummary(seller, sellerUser, orderTrust),
     order: review.order
       ? {
           id: review.order.id,
@@ -117,7 +123,7 @@ const mapSellerCustomerReview = (review) => {
   };
 };
 
-const mapMySellerCustomerReview = (review) => {
+const mapMySellerCustomerReview = (review, orderTrust = null) => {
   const customer = review.customer;
   const customerUser = customer?.user;
   const item = review.order?.items?.[0];
@@ -127,7 +133,7 @@ const mapMySellerCustomerReview = (review) => {
     rating: review.rating,
     comment: review.comment,
     createdAt: review.get("createdAt"),
-    customer: mapCustomerSummary(customer, customerUser),
+    customer: mapCustomerSummary(customer, customerUser, orderTrust),
     order: review.order
       ? {
           id: review.order.id,
@@ -367,7 +373,7 @@ const getCustomerSellerReviews = async (customerId, query = {}) => {
         {
           model: Seller,
           as: "seller",
-          attributes: ["id", "storeName"],
+          attributes: ["id", "storeName", "rating", "ratingCount"],
           include: [
             {
               model: User,
@@ -416,10 +422,19 @@ const getCustomerSellerReviews = async (customerId, query = {}) => {
   const averageRating =
     averageRaw == null ? 0 : Number(Number(averageRaw).toFixed(2));
 
+  const trustBySellerId = await getSellersOrderTrustStats(
+    rows.map((review) => review.seller?.id).filter(Boolean),
+  );
+
   return {
     averageRating,
     totalReviews: count,
-    reviews: rows.map(mapSellerCustomerReview),
+    reviews: rows.map((review) =>
+      mapSellerCustomerReview(
+        review,
+        trustBySellerId.get(review.seller?.id),
+      ),
+    ),
     pagination: buildPagination(count, page, limit),
   };
 };
@@ -499,10 +514,19 @@ const getSellerCustomerReviewsBySellerId = async (sellerId, query = {}) => {
   const averageRating =
     averageRaw == null ? 0 : Number(Number(averageRaw).toFixed(2));
 
+  const trustByCustomerId = await getCustomersOrderTrustStats(
+    rows.map((review) => review.customer?.id).filter(Boolean),
+  );
+
   return {
     averageRating,
     totalReviews: count,
-    reviews: rows.map(mapMySellerCustomerReview),
+    reviews: rows.map((review) =>
+      mapMySellerCustomerReview(
+        review,
+        trustByCustomerId.get(review.customer?.id),
+      ),
+    ),
     pagination: buildPagination(count, page, limit),
   };
 };

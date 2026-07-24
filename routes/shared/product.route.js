@@ -35,6 +35,15 @@ router.get(
   productController.getSellerProducts,
 );
 
+router.get(
+  "/:id",
+  authenticateAccessToken,
+  allowedTo(USER_ROLES.SELLER),
+  getProductDetailsPublicValidator,
+  requestsValidator,
+  productController.getSellerProductDetails,
+);
+
 router.post(
   "/",
   authenticateAccessToken,

@@ -18,6 +18,10 @@ const NOTIFICATION_TYPES = require("../../constants/notification/notificationTyp
 const notificationService = require("../notification/notification.service.js");
 const USER_ROLES = require("../../constants/user/userRoles.constant.js");
 const { mapCustomerSummary } = require("../../utils/navigation/customerProfileLink.util.js");
+const {
+  getCustomersOrderTrustStats,
+  getCustomerOrderTrustStats,
+} = require("../../utils/navigation/customerTrustStats.util.js");
 
 const getSellerFromRequest = async (req) => {
   const userId = req.user?.id || req.user?.userId || null;
@@ -120,8 +124,16 @@ const getSellerOrders = async (req) => {
     getSellerOrderStats(sellerId),
   ]);
 
+  const trustByCustomerId = await getCustomersOrderTrustStats(
+    rows.map((order) => order.customer?.id).filter(Boolean),
+  );
+
   const formattedOrders = rows.map((order) => {
-    const customer = mapCustomerSummary(order.customer, order.customer?.user);
+    const customer = mapCustomerSummary(
+      order.customer,
+      order.customer?.user,
+      trustByCustomerId.get(order.customer?.id),
+    );
     const firstName = customer?.firstName || "";
     const lastName = customer?.lastName || "";
 
@@ -187,7 +199,12 @@ const getOrderDetails = async (req) => {
 
   const nextStatus = STATUS_TRANSITIONS[order.status] || null;
   const nextStatusLabel = nextStatus ? STATUS_LABELS[nextStatus] : null;
-  const customerSummary = mapCustomerSummary(order.customer, order.customer?.user);
+  const orderTrust = await getCustomerOrderTrustStats(order.customer?.id);
+  const customerSummary = mapCustomerSummary(
+    order.customer,
+    order.customer?.user,
+    orderTrust,
+  );
   const orderJson = order.toJSON();
 
   return {
