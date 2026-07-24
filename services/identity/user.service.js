@@ -1,13 +1,141 @@
+const { Op, fn, col } = require("sequelize");
 const User = require("../../models/user.model.js");
 const bcrypt = require("bcryptjs");
+const Role = require("../../models/role.model.js");
+const Customer = require("../../models/customer.model.js");
+const Seller = require("../../models/seller.model.js");
+const PAGINATION = require("../../constants/shared/pagination.constant");
+const Order = require("../../models/order.model.js");
+const USER_ROLES = require("../../constants/user/userRoles.constant.js");
 
-const getAllUsers = async (limit, skip) => {
-  const users = await User.find(
-    {},
-    { password: false, __v: false },
-    { limit, skip },
-  );
-  return users;
+const getAllUsers = async (req) => {
+  const { search, role, status } = req.query ?? {};
+  const page = Math.max(Number(req.query?.page) || PAGINATION.DEFAULT_PAGE, 1);
+  const limit = PAGINATION.DEFAULT_LIMIT;
+  const offset = (page - 1) * limit;
+
+  const where = {};
+
+  if (search?.trim()) {
+    const term = `%${search.trim()}%`;
+    where[Op.or] = [
+      { firstName: { [Op.like]: term } },
+      { lastName: { [Op.like]: term } },
+      { email: { [Op.like]: term } },
+    ];
+  }
+
+  if (status) {
+    where.status = status;
+  }
+
+  // User → Role is belongsTo (active_role_id), NOT many-to-many.
+  const roleInclude = {
+    model: Role,
+    as: "role",
+    attributes: ["id", "name"],
+    required: Boolean(role),
+    ...(role ? { where: { name: role } } : {}),
+  };
+
+  const [{ count, rows }, totalActive] = await Promise.all([
+    User.findAndCountAll({
+      where,
+      attributes: [
+        "id",
+        "firstName",
+        "lastName",
+        "email",
+        "avatar",
+        "status",
+        "created_at",
+      ],
+      include: [
+        roleInclude,
+        {
+          model: Customer,
+          as: "customer",
+          attributes: ["id"],
+          required: false,
+        },
+        {
+          model:Seller,
+          as: "seller",
+          attributes: ["id"],
+          required: false,
+        }
+      ],
+      order: [["created_at", "DESC"]],
+      limit,
+      offset,
+      distinct: true,
+    }),
+    User.count({ where: { status: "active" } }),
+  ]);
+
+  // Orders use customer_id → count per customer, then map back to users.
+  const customerIds = rows
+    .map((user) => user.customer?.id)
+    .filter(Boolean);
+
+  const orderCountByCustomerId = new Map();
+
+  if (customerIds.length > 0) {
+    const orderCounts = await Order.findAll({
+      attributes: ["customerId", [fn("COUNT", col("id")), "orderCount"]],
+      where: { customerId: { [Op.in]: customerIds } },
+      group: ["customerId"],
+      raw: true,
+    });
+
+    for (const row of orderCounts) {
+      orderCountByCustomerId.set(row.customerId, Number(row.orderCount) || 0);
+    }
+  }
+
+  const users = rows.map((user) => {
+    const plain = user.toJSON();
+    const roleName = plain.role?.name ?? null;
+    const customerId = plain.customer?.id || null;
+    const sellerId = plain.seller?.id || null;
+
+    return {
+      id: plain.id,
+      firstName: plain.firstName,
+      lastName: plain.lastName,
+      fullName: `${plain.firstName} ${plain.lastName}`,
+      email: plain.email,
+      avatar: plain.avatar,
+      role: roleName,
+      ...(roleName === USER_ROLES.CUSTOMER && { customerId }),
+      ...(roleName === USER_ROLES.SELLER && { sellerId }),
+      ordersCount: customerId
+        ? orderCountByCustomerId.get(customerId) || 0
+        : 0,
+      status: plain.status,
+      joinedAt: plain.created_at
+        ? new Date(plain.created_at).toISOString().split("T")[0]
+        : null,
+    };
+  });
+
+  const totalPages = Math.ceil(count / limit);
+
+  return {
+    summary: {
+      total: count,
+      active: totalActive,
+    },
+    users,
+    pagination: {
+      currentPage: page,
+      totalPages,
+      totalItems: count,
+      pageSize: limit,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  };
 };
 
 const getUserById = async (userId) => {

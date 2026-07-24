@@ -1,19 +1,10 @@
-// const userServices = require("../../services/user.service.js");
-// const PAGINATION = require("../constants/pagination.js");
-// const tokens = require("../utils/tokens.js");
+const userServices = require("../../services/identity/user.service.js");
+const apiResponse = require("../../utils/http/apiResponse.util.js");
 
-// const getAllUsers = async (req, res) => {
-//   const page = Number(req.query.page) || PAGINATION.DEFAULT_PAGE || 1;
-//   const limit = PAGINATION.DEFAULT_LIMIT || 10;
-//   const skip = (page - 1) * limit;
-
-//   const users = await userServices.getAllUsers(limit, skip);
-
-//   apiResponse.sendSuccess(
-//     res,
-//     data: { users }
-//   );
-// };
+const getAllUsers = async (req, res) => {
+  const result = await userServices.getAllUsers(req);
+  return apiResponse.sendSuccess(res, result, 200);
+};
 
 // const getUser = async (req, res) => {
 //   const userId = req.params.userId;
@@ -109,12 +100,4 @@
 //   );
 // };
 
-// module.exports = {
-//   getAllUsers,
-//   getUser,
-//   createUser,
-//   updateAllUsers,
-//   updateUser,
-//   deleteAllUsers,
-//   deleteUser
-// };
+module.exports={getAllUsers}

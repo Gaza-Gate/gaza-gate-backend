@@ -1,5 +1,5 @@
 const uuidValidate = require("uuid-validate");
-const apiResponse = require("../../utils/apiResponse");
+const apiResponse = require("../../utils/http/apiResponse.util.js");
 
 const idValidator = (paramName) => {
   return (req, res, next) => {

@@ -932,12 +932,13 @@ const replyToReview = async (userId, reviewId, reply) => {
       type: NOTIFICATION_TYPES.REVIEW,
       title: "رد على تقييمك",
       content: `رد ${seller.storeName} على تقييمك للمنتج "${productName}"`,
-      actionUrl: `/orders`,
+      actionUrl: `/api/product/public/${review.productId}`,
     });
   }
 
   return {
-    id: review.id,
+    reviewId: reviewId,
+    productId: review.productId,
     sellerReply: trimmedReply,
     sellerRepliedAt: repliedAt,
   };

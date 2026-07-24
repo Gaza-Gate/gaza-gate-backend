@@ -25,6 +25,7 @@ const conversationRoute = require("./routes/shared/conversation.route.js");
 const apiResponse = require("./utils/http/apiResponse.util.js");
 const errorHandler = require("./middlewares/common/errorHandler.middleware.js");
 const adminCategoryRoute = require("./routes/admin/category.route.js");
+const adminUserRoute = require("./routes/admin/user.route.js");
 const sellerStoreRoute = require("./routes/customer/sellerStore.route.js");
 const sharedReviewRoute = require("./routes/shared/review.route.js");
 
@@ -61,6 +62,7 @@ app.use("/api/customer/chatbot", customerChatbotRoute);
 app.use("/api/seller/chatbot", sellerChatbotRoute);
 app.use("/api/conversations", conversationRoute);
 app.use("/api/admin/category", adminCategoryRoute);
+app.use("/api/admin/user", adminUserRoute);
 app.use("/api/customer/store", sellerStoreRoute);
 
 app.use((req, res, next) => {
