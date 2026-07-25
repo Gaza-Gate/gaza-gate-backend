@@ -12,6 +12,16 @@ const ORDER_STATUSES = require("../../../constants/order/orderStatuses.constant.
 const USER_ROLES = require("../../../constants/user/userRoles.constant.js");
 const AppError = require("../../../utils/http/AppError.util.js");
 
+const CONFIRMATION_REQUIRED_TOOLS = new Set([
+  SELLER_CHATBOT_TOOLS.UPDATE_PROFILE,
+  SELLER_CHATBOT_TOOLS.UPDATE_PRODUCT,
+  SELLER_CHATBOT_TOOLS.TOGGLE_PRODUCT_STATUS,
+  SELLER_CHATBOT_TOOLS.CREATE_PRODUCT,
+  SELLER_CHATBOT_TOOLS.ADVANCE_ORDER_STATUS,
+  SELLER_CHATBOT_TOOLS.REJECT_ORDER,
+  SELLER_CHATBOT_TOOLS.REPLY_TO_CUSTOMER,
+]);
+
 const buildSellerReq = (
   userId,
   { body = {}, params = {}, query = {}, file = null } = {},
@@ -38,6 +48,10 @@ const runTool = async (userId, executor) => {
 };
 
 const buildActionSummary = (toolName, result) => {
+  if (result.requiresConfirmation) {
+    return `${toolName} requires seller confirmation`;
+  }
+
   if (!result.success) {
     return `${toolName} failed: ${result.message}`;
   }
@@ -56,6 +70,11 @@ const buildActionSummary = (toolName, result) => {
       return `Product ${data.productId} → ${data.status}`;
     case SELLER_CHATBOT_TOOLS.CREATE_PRODUCT:
       return `Product "${data.name}" created`;
+    case SELLER_CHATBOT_TOOLS.LIST_PRODUCT_ORDERS:
+      if (data.requiresSelection) {
+        return `${data.products.length} matching products found`;
+      }
+      return `${data.summary.ordersCount} orders found for product ${data.product.name}`;
     default:
       return toolName;
   }
@@ -166,6 +185,20 @@ const executors = {
       orderService.getSellerOrders(
         buildSellerReq(userId, {
           query: { status: args.status, page: args.page },
+        }),
+      ),
+    ),
+
+  [SELLER_CHATBOT_TOOLS.LIST_PRODUCT_ORDERS]: (userId, args) =>
+    runTool(userId, () =>
+      orderService.listProductOrders(
+        buildSellerReq(userId, {
+          query: {
+            productId: args.productId,
+            productName: args.productName,
+            status: args.status,
+            page: args.page,
+          },
         }),
       ),
     ),
@@ -379,6 +412,34 @@ const getToolDefinitions = () => [
   {
     type: "function",
     function: {
+      name: SELLER_CHATBOT_TOOLS.LIST_PRODUCT_ORDERS,
+      description:
+        "List orders that include one of the current seller's products. Use productId when known; otherwise use productName from the seller's message. Never include sellerId or userId.",
+      parameters: {
+        type: "object",
+        properties: {
+          productId: {
+            type: "string",
+            description: "Product UUID owned by the current seller",
+          },
+          productName: {
+            type: "string",
+            description: "Product name or search text mentioned by seller",
+          },
+          status: {
+            type: "string",
+            enum: Object.values(ORDER_STATUSES),
+            description: "Optional order status filter",
+          },
+          page: { type: "integer" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: SELLER_CHATBOT_TOOLS.GET_ORDER_DETAILS,
       description: "Get full details for a specific order.",
       parameters: {
@@ -457,11 +518,40 @@ const getToolDefinitions = () => [
   },
 ];
 
-const executeTool = async (userId, toolName, args, context = {}) => {
+const requiresConfirmation = (toolName) =>
+  CONFIRMATION_REQUIRED_TOOLS.has(toolName);
+
+const buildPendingAction = (toolName, args, context = {}) => ({
+  toolName,
+  args: args || {},
+  context: {
+    sessionId: context.sessionId || null,
+    hasProductImage: !!context.hasProductImage,
+  },
+});
+
+const executeTool = async (
+  userId,
+  toolName,
+  args,
+  context = {},
+  options = {},
+) => {
   const executor = executors[toolName];
   if (!executor) {
     return { success: false, message: `Unknown tool: ${toolName}` };
   }
+
+  if (requiresConfirmation(toolName) && !options.confirmed) {
+    return {
+      success: true,
+      requiresConfirmation: true,
+      pendingAction: buildPendingAction(toolName, args, context),
+      message:
+        "This action changes data and must be confirmed by the seller before execution.",
+    };
+  }
+
   return executor(userId, args || {}, context);
 };
 
@@ -469,4 +559,5 @@ module.exports = {
   getToolDefinitions,
   executeTool,
   buildActionSummary,
+  requiresConfirmation,
 };

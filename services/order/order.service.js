@@ -1,4 +1,4 @@
-const { fn, col } = require("sequelize");
+const { Op, fn, col } = require("sequelize");
 const Order = require("../../models/order.model.js");
 const OrderItem = require("../../models/orderItem.model.js");
 const Product = require("../../models/product.model.js");
@@ -153,6 +153,191 @@ const getSellerOrders = async (req) => {
   return {
     orders: formattedOrders,
     stats,
+    pagination: {
+      totalItems: count,
+      totalPages,
+      currentPage: page,
+      pageSize: limit,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  };
+};
+
+const resolveSellerProductForOrders = async (
+  sellerId,
+  { productId, productName },
+) => {
+  if (productId) {
+    const product = await Product.findOne({
+      where: { id: productId, sellerId, isDeleted: false },
+      attributes: ["id", "name"],
+    });
+    if (!product) throw AppError.fail("Product not found.", 404);
+    return { product, matches: null };
+  }
+
+  const search = productName?.trim();
+  if (!search) {
+    throw AppError.fail("Product ID or product name is required.", 400);
+  }
+
+  const matches = await Product.findAll({
+    where: {
+      sellerId,
+      isDeleted: false,
+      name: { [Op.like]: `%${search}%` },
+    },
+    attributes: ["id", "name", "price", "status"],
+    order: [["created_at", "DESC"]],
+    limit: 10,
+  });
+
+  if (!matches.length) throw AppError.fail("Product not found.", 404);
+
+  const exactMatch = matches.find(
+    (product) => product.name.toLowerCase() === search.toLowerCase(),
+  );
+
+  if (exactMatch || matches.length === 1) {
+    return { product: exactMatch || matches[0], matches: null };
+  }
+
+  return { product: null, matches };
+};
+
+const listProductOrders = async (req) => {
+  const seller = await getSellerFromRequest(req);
+  if (!seller) throw AppError.fail("Seller not found.", 404);
+  const sellerId = seller.id;
+
+  const { product, matches } = await resolveSellerProductForOrders(sellerId, {
+    productId: req.query.productId,
+    productName: req.query.productName,
+  });
+
+  if (matches) {
+    return {
+      requiresSelection: true,
+      message: "Multiple matching products found. Choose one product ID.",
+      products: matches.map((match) => ({
+        id: match.id,
+        name: match.name,
+        price: match.price,
+        status: match.status,
+      })),
+    };
+  }
+
+  const page = Math.max(Number(req.query.page) || PAGINATION.DEFAULT_PAGE, 1);
+  const limit = PAGINATION.DEFAULT_LIMIT;
+  const offset = (page - 1) * limit;
+
+  const where = {
+    sellerId,
+    isDeleted: false,
+  };
+
+  if (
+    req.query.status &&
+    Object.values(ORDER_STATUSES).includes(req.query.status)
+  ) {
+    where.status = req.query.status;
+  }
+
+  const { count, rows } = await Order.findAndCountAll({
+    where,
+    attributes: ["id", "orderNumber", "status", "totalPrice", "created_at"],
+    include: [
+      {
+        model: OrderItem,
+        as: "items",
+        where: { productId: product.id },
+        attributes: [
+          "id",
+          "productId",
+          "productName",
+          "unitPrice",
+          "quantity",
+          "lineTotal",
+        ],
+      },
+      {
+        model: Customer,
+        as: "customer",
+        attributes: ["id"],
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["firstName", "lastName", "avatar"],
+          },
+        ],
+      },
+    ],
+    order: [["created_at", "DESC"]],
+    limit,
+    offset,
+    distinct: true,
+  });
+
+  const quantityRows = await OrderItem.findAll({
+    attributes: [[fn("SUM", col("quantity")), "totalQuantity"]],
+    where: { productId: product.id },
+    include: [
+      {
+        model: Order,
+        as: "order",
+        attributes: [],
+        where,
+      },
+    ],
+    raw: true,
+  });
+
+  const trustByCustomerId = await getCustomersOrderTrustStats(
+    rows.map((order) => order.customer?.id).filter(Boolean),
+  );
+
+  const orders = rows.map((order) => {
+    const customer = mapCustomerSummary(
+      order.customer,
+      order.customer?.user,
+      trustByCustomerId.get(order.customer?.id),
+    );
+    const item = order.items?.[0] || null;
+
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      date: order.created_at,
+      totalPrice: order.totalPrice,
+      customer,
+      item: item
+        ? {
+            id: item.id,
+            productId: item.productId,
+            productName: item.productName,
+            unitPrice: item.unitPrice,
+            quantity: item.quantity,
+            lineTotal: item.lineTotal,
+          }
+        : null,
+    };
+  });
+
+  const totalPages = Math.ceil(count / limit);
+  return {
+    product: {
+      id: product.id,
+      name: product.name,
+    },
+    orders,
+    summary: {
+      ordersCount: count,
+      totalQuantity: Number(quantityRows[0]?.totalQuantity || 0),
+    },
     pagination: {
       totalItems: count,
       totalPages,
@@ -344,6 +529,7 @@ const rejectOrder = async (req) => {
 
 module.exports = {
   getSellerOrders,
+  listProductOrders,
   getOrderDetails,
   updateOrderStatus,
   rejectOrder,

@@ -2,7 +2,9 @@ const ChatbotRecord = require("../../../models/chatbotRecord.model.js");
 const Seller = require("../../../models/seller.model.js");
 const cloudinaryService = require("../../integrations/cloudinary.service.js");
 const sellerAiAgent = require("../sellerAiAgent.service.js");
+const sellerChatbotTools = require("./sellerChatbotTools.service.js");
 const imageTokenService = require("./sellerChatbotImageToken.service.js");
+const pendingActionService = require("./sellerChatbotPendingAction.service.js");
 const {
   CHATBOT_RECORD_TYPES,
 } = require("../../../constants/chatbot/chatbot.constant.js");
@@ -52,6 +54,59 @@ const getSessionMessageCount = async (sessionId) =>
 
 const touchSession = async (session) => {
   await session.update({ content: session.content });
+};
+
+const CONFIRMATION_WORDS = new Set([
+  "yes",
+  "y",
+  "confirm",
+  "confirmed",
+  "approve",
+  "approved",
+  "ok",
+  "okay",
+  "نعم",
+  "اه",
+  "أه",
+  "تمام",
+  "اكد",
+  "أكد",
+  "موافق",
+  "نفذ",
+  "نفّذ",
+]);
+
+const CANCELLATION_WORDS = new Set([
+  "no",
+  "n",
+  "cancel",
+  "stop",
+  "لا",
+  "الغاء",
+  "إلغاء",
+  "وقف",
+  "بلاش",
+]);
+
+const normalizeDecisionMessage = (message) =>
+  String(message || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.!؟?،,]/g, "");
+
+const isConfirmationMessage = (message) =>
+  CONFIRMATION_WORDS.has(normalizeDecisionMessage(message));
+
+const isCancellationMessage = (message) =>
+  CANCELLATION_WORDS.has(normalizeDecisionMessage(message));
+
+const buildConfirmedActionReply = (toolName, result) => {
+  if (result.success === false) {
+    return `لم يتم تنفيذ الإجراء: ${result.message || "حدث خطأ أثناء التنفيذ."}`;
+  }
+
+  const summary = sellerChatbotTools.buildActionSummary(toolName, result);
+  return `تم تنفيذ الإجراء بنجاح. ${summary}`;
 };
 
 const loadChatHistory = async (sessionId) => {
@@ -135,6 +190,79 @@ const chat = async (userId, message, sessionId, file) => {
     content: displayMessage,
   });
 
+  const pendingAction = pendingActionService.getPendingAction(
+    userId,
+    session.id,
+  );
+
+  if (pendingAction && isCancellationMessage(trimmedMessage)) {
+    pendingActionService.clearPendingAction(userId, session.id);
+    const reply = "تم إلغاء الإجراء، ولم يتم تغيير أي بيانات.";
+
+    await ChatbotRecord.create({
+      userId,
+      sessionId: session.id,
+      recordType: CHATBOT_RECORD_TYPES.SELLER_MESSAGE,
+      role: SELLER_CHAT_MESSAGE_ROLES.ASSISTANT,
+      content: reply,
+    });
+
+    await touchSession(session);
+
+    return {
+      reply,
+      sessionId: session.id,
+      actions: [
+        {
+          tool: pendingAction.toolName,
+          success: true,
+          cancelled: true,
+          summary: `${pendingAction.toolName} cancelled`,
+        },
+      ],
+      productImageReady: !!imageTokenService.getSessionImage(userId, session.id),
+    };
+  }
+
+  if (pendingAction && isConfirmationMessage(trimmedMessage)) {
+    const action = pendingActionService.consumePendingAction(userId, session.id);
+    const result = await sellerChatbotTools.executeTool(
+      userId,
+      action.toolName,
+      action.args,
+      action.context,
+      { confirmed: true },
+    );
+    const reply = buildConfirmedActionReply(action.toolName, result);
+
+    await ChatbotRecord.create({
+      userId,
+      sessionId: session.id,
+      recordType: CHATBOT_RECORD_TYPES.SELLER_MESSAGE,
+      role: SELLER_CHAT_MESSAGE_ROLES.ASSISTANT,
+      content: reply,
+    });
+
+    await touchSession(session);
+
+    return {
+      reply,
+      sessionId: session.id,
+      actions: [
+        {
+          tool: action.toolName,
+          success: result.success !== false,
+          confirmed: true,
+          summary: sellerChatbotTools.buildActionSummary(
+            action.toolName,
+            result,
+          ),
+        },
+      ],
+      productImageReady: !!imageTokenService.getSessionImage(userId, session.id),
+    };
+  }
+
   const agentContext = {
     sessionId: session.id,
     hasProductImage: productImageReady,
@@ -171,10 +299,22 @@ const chat = async (userId, message, sessionId, file) => {
 
   await touchSession(session);
 
+  const nextPendingAction = pendingActionService.getPendingAction(
+    userId,
+    session.id,
+  );
+
   return {
     reply: agentResult.reply,
     sessionId: session.id,
     actions: agentResult.actions,
+    requiresConfirmation: !!nextPendingAction,
+    ...(nextPendingAction && {
+      pendingAction: {
+        tool: nextPendingAction.toolName,
+        expiresAt: new Date(nextPendingAction.expiresAt).toISOString(),
+      },
+    }),
     productImageReady: !!imageTokenService.getSessionImage(userId, session.id),
     ...(uploadedImageUrl && { productImageUrl: uploadedImageUrl }),
   };

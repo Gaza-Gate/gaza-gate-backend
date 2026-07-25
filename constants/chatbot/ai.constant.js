@@ -1,5 +1,8 @@
 const getApiKey = () =>
-  process.env.AI_API_KEY || "";
+  process.env.OPENAI_API_KEY ||
+  process.env.AI_API_KEY ||
+  process.env.GROQ_API_KEY ||
+  "";
 
 const baseUrl = (process.env.AI_BASE_URL || "https://openrouter.ai/api/v1").replace(
   /\/$/,
@@ -11,10 +14,16 @@ const AI = Object.freeze({
   CHAT_COMPLETIONS_URL: `${baseUrl}/chat/completions`,
   // Customer and seller bots may need different model names (especially with
   // non-OpenRouter OpenAI-compatible base URLs).
-  CUSTOMER_CHAT_MODEL: "deepseek-v4-flash",
-  SELLER_CHAT_MODEL: "deepseek-v4-flash",
+  CUSTOMER_CHAT_MODEL:
+    process.env.AI_CUSTOMER_CHAT_MODEL ||
+    process.env.AI_CHAT_MODEL ||
+    "deepseek-v4-flash",
+  SELLER_CHAT_MODEL:
+    process.env.AI_SELLER_CHAT_MODEL ||
+    process.env.AI_CHAT_MODEL ||
+    "deepseek-v4-flash",
 
-  CHAT_MODEL:"deepseek-v4-flash",
+  CHAT_MODEL: process.env.AI_CHAT_MODEL || "deepseek-v4-flash",
   IMAGE_MODEL: process.env.AI_IMAGE_MODEL || "gemini-3.1-flash-image-preview",
   CUSTOMER_MAX_TOKENS: 512,
   SELLER_MAX_TOKENS: 1024,

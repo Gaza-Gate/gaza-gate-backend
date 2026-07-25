@@ -99,7 +99,7 @@ const localRegister = async (data, roleName, createProfile) => {
     throw err;
   }
 
-  console.log(otpCode);
+  console.log(`[email-verification] ${user.email}: ${otpCode}`);
   void sendVerificationEmail(user.email, otpCode).catch((emailError) => {
     console.error("Email sending failed:", emailError);
   });
@@ -328,6 +328,11 @@ const resendVerificationCode = async ({ email }) => {
     await sendVerificationEmail(result.email, result.otpCode);
   } catch (emailError) {
     console.error("Email sending failed:", emailError);
+
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[email-verification] ${result.email}: ${result.otpCode}`);
+      return genericMessage;
+    }
 
     await deleteEmailVerificationByUserId(
       result.userId,

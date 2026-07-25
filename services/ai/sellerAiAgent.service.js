@@ -1,6 +1,7 @@
 const AI = require("../../constants/chatbot/ai.constant.js");
 const aiClient = require("./aiClient.service.js");
 const sellerChatbotTools = require("./chatbot/sellerChatbotTools.service.js");
+const pendingActionService = require("./chatbot/sellerChatbotPendingAction.service.js");
 const {
   SELLER_CHATBOT_LIMITS,
   SELLER_CHATBOT_SYSTEM_PROMPT,
@@ -46,6 +47,7 @@ const executeToolCalls = async (userId, toolCalls, context) => {
         action: {
           tool: toolName,
           success: result.success !== false,
+          requiresConfirmation: !!result.requiresConfirmation,
           summary: sellerChatbotTools.buildActionSummary(toolName, result),
         },
         result,
@@ -108,6 +110,13 @@ const runAgent = async (userId, history, userMessage, context = {}) => {
 
         for (const { toolCall, action, result } of toolResults) {
           actions.push(action);
+          if (result.requiresConfirmation && result.pendingAction) {
+            pendingActionService.setPendingAction(
+              userId,
+              context.sessionId,
+              result.pendingAction,
+            );
+          }
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,

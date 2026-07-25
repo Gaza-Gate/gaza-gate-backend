@@ -11,7 +11,9 @@ async function startServer() {
   try {
     await connectDB();
 
-   //await sequelize.sync();
+    if (process.env.DB_SYNC === "true") {
+      await sequelize.sync();
+    }
     await seedRoles();
     await loadKnowledgeBase();
 
