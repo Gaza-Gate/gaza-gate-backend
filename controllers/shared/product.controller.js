@@ -37,8 +37,14 @@ const getProductDetailsPublic = asyncWrapper(async (req, res) => {
   return apiResponse.sendSuccess(res, result, 200);
 });
 
+const getSellerProductDetails = asyncWrapper(async (req, res) => {
+  const result = await productService.getSellerProductDetails(req);
+  return apiResponse.sendSuccess(res, result, 200);
+});
+
 module.exports = {
   getSellerProducts,
+  getSellerProductDetails,
   createProduct,
   updateProduct,
   toggleStatus,

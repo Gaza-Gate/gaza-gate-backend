@@ -12,11 +12,14 @@ const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const PRODUCT_STATUS = require("../../constants/product/productStatus.constant.js");
 const PRODUCT_STOCK_TYPES = require("../../constants/product/stockType.constant.js");
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+const {
+  getSellersOrderTrustStats,
+} = require("../../utils/navigation/sellerTrustStats.util.js");
 
 const sellerSummaryInclude = {
   model: Seller,
   as: "seller",
-  attributes: ["id", "storeName"],
+  attributes: ["id", "storeName", "rating", "ratingCount"],
   include: [
     {
       model: User,
@@ -89,6 +92,10 @@ const getCart = async (req) => {
 
   const totalPages = Math.ceil(count / limit);
 
+  const trustBySellerId = await getSellersOrderTrustStats(
+    rows.map((cartItem) => cartItem.product?.seller?.id).filter(Boolean),
+  );
+
   const items = rows.map((cartItem) => {
     const product = cartItem.product;
     const primaryImage = product?.images?.[0];
@@ -105,7 +112,11 @@ const getCart = async (req) => {
             stockType: product.stockType,
             quantity: product.quantity,
             status: product.status,
-            seller: mapSellerSummary(product.seller),
+            seller: mapSellerSummary(
+              product.seller,
+              null,
+              trustBySellerId.get(product.seller?.id),
+            ),
             imageUrl: primaryImage?.imageUrl ?? null,
           }
         : null,

@@ -13,8 +13,13 @@ const PRODUCT_STATUS = require('../../constants/product/productStatus.constant')
 const {
   buildSellerStoreActionUrl,
   mapSellerSummary,
+  computeIsTrustedSeller,
 } = require('../../utils/navigation/sellerStoreLink.util');
 const { mapCustomerSummary } = require('../../utils/navigation/customerProfileLink.util');
+const { getSellerOrderTrustStats } = require('../../utils/navigation/sellerTrustStats.util');
+const {
+  getCustomersOrderTrustStats,
+} = require('../../utils/navigation/customerTrustStats.util');
 
 const PREVIEW_LIMIT = 4;
 
@@ -70,7 +75,7 @@ const mapPreviewProduct = (product) => ({
     : null,
 });
 
-const mapReview = (review) => {
+const mapReview = (review, orderTrust = null) => {
   return {
     id: review.id,
     rating: review.rating,
@@ -79,7 +84,11 @@ const mapReview = (review) => {
     sellerReply: review.sellerReply ?? null,
     sellerRepliedAt: review.sellerRepliedAt ?? null,
     createdAt: review.get('createdAt'),
-    customer: mapCustomerSummary(review.customer, review.customer?.user),
+    customer: mapCustomerSummary(
+      review.customer,
+      review.customer?.user,
+      orderTrust,
+    ),
   };
 };
 
@@ -158,6 +167,13 @@ const getPublicStore = async (sellerId) => {
     }),
   ]);
 
+  const [orderTrust, customerTrustById] = await Promise.all([
+    getSellerOrderTrustStats(seller.id),
+    getCustomersOrderTrustStats(
+      reviews.map((review) => review.customer?.id).filter(Boolean),
+    ),
+  ]);
+
   return {
     store: {
       id: seller.id,
@@ -167,6 +183,12 @@ const getPublicStore = async (sellerId) => {
       ratingCount: seller.ratingCount,
       actionUrl: buildSellerStoreActionUrl(seller.id),
       avatar: seller.user?.avatar ?? null,
+      isTrustedSeller: computeIsTrustedSeller({
+        rating: seller.rating,
+        ratingCount: seller.ratingCount,
+        completedOrders: orderTrust.completedOrders,
+        completionRate: orderTrust.completionRate,
+      }),
       user: {
         avatar: seller.user?.avatar ?? null,
       },
@@ -182,7 +204,9 @@ const getPublicStore = async (sellerId) => {
     reviews: {
       average:      seller.rating,
       total:        seller.ratingCount,
-      list:         reviews.map(mapReview),
+      list:         reviews.map((review) =>
+        mapReview(review, customerTrustById.get(review.customer?.id)),
+      ),
       hasMore:      reviewsTotal > reviewsLimit
     },
   };
@@ -191,7 +215,7 @@ const getPublicStore = async (sellerId) => {
 const getStoreProducts = async (sellerId, query) => {
   const seller = await Seller.findOne({
     where: { id: sellerId },
-    attributes: ['id', 'storeName'],
+    attributes: ['id', 'storeName', 'rating', 'ratingCount'],
     include: [
       {
         model: User,
@@ -207,21 +231,24 @@ const getStoreProducts = async (sellerId, query) => {
   const offset = (page - 1) * limit;
   const order = PRODUCT_SORT[query.sort] ?? PRODUCT_SORT.newest;
 
-  const { count, rows } = await Product.findAndCountAll({
-    where: activeProductWhere(seller.id),
-    attributes: ['id', 'name', 'price', 'quantity', 'stockType'],
-    include: [primaryImageInclude, categoryInclude],
-    order,
-    limit,
-    offset,
-    distinct: true,
-  });
+  const [{ count, rows }, orderTrust] = await Promise.all([
+    Product.findAndCountAll({
+      where: activeProductWhere(seller.id),
+      attributes: ['id', 'name', 'price', 'quantity', 'stockType'],
+      include: [primaryImageInclude, categoryInclude],
+      order,
+      limit,
+      offset,
+      distinct: true,
+    }),
+    getSellerOrderTrustStats(seller.id),
+  ]);
 
   const totalPages = Math.ceil(count / limit);
 
   return {
     storeName: seller.storeName,
-    store: mapSellerSummary(seller),
+    store: mapSellerSummary(seller, null, orderTrust),
     products: rows.map(mapStoreProduct),
     pagination: {
       currentPage: page,

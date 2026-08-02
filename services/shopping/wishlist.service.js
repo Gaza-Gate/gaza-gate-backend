@@ -8,11 +8,14 @@ const AppError = require("../../utils/http/AppError.util.js");
 const resolveCustomerIdFromRequest = require("../../utils/security/resolveCustomerIdFromRequest.util.js");
 const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+const {
+  getSellersOrderTrustStats,
+} = require("../../utils/navigation/sellerTrustStats.util.js");
 
 const sellerSummaryInclude = {
   model: Seller,
   as: "seller",
-  attributes: ["id", "storeName"],
+  attributes: ["id", "storeName", "rating", "ratingCount"],
   include: [
     {
       model: User,
@@ -66,6 +69,10 @@ const getWishlist = async (req) => {
 
   const totalPages = Math.ceil(count / limit);
 
+  const trustBySellerId = await getSellersOrderTrustStats(
+    rows.map((w) => w.product?.seller?.id).filter(Boolean),
+  );
+
   const items = rows.map((w) => {
     const product = w.product;
     const primaryImage = product?.images?.[0];
@@ -82,7 +89,11 @@ const getWishlist = async (req) => {
             quantity: product.quantity,
             averageRating: product.averageRating,
             reviewsCount: product.reviewsCount,
-            seller: mapSellerSummary(product.seller),
+            seller: mapSellerSummary(
+              product.seller,
+              null,
+              trustBySellerId.get(product.seller?.id),
+            ),
             imageUrl: primaryImage?.imageUrl ?? null,
           }
         : null,

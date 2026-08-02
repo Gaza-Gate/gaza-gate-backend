@@ -17,11 +17,15 @@ const PRODUCT_STOCK_TYPES = require("../../constants/product/stockType.constant.
 const NOTIFICATION_TYPES = require("../../constants/notification/notificationTypes.constant.js");
 const notificationService = require("../notification/notification.service.js");
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
+const {
+  getSellersOrderTrustStats,
+  getSellerOrderTrustStats,
+} = require("../../utils/navigation/sellerTrustStats.util.js");
 
 const sellerSummaryInclude = {
   model: Seller,
   as: "seller",
-  attributes: ["id", "storeName"],
+  attributes: ["id", "storeName", "rating", "ratingCount"],
   include: [
     {
       model: User,
@@ -334,6 +338,10 @@ const getCustomerOrders = async (req) => {
     distinct: true,
   });
 
+  const trustBySellerId = await getSellersOrderTrustStats(
+    rows.map((order) => order.seller?.id).filter(Boolean),
+  );
+
   const orders = rows.map((order) => ({
     id: order.id,
     orderNumber: order.orderNumber,
@@ -342,7 +350,11 @@ const getCustomerOrders = async (req) => {
     paymentMethod: order.paymentMethod,
     createdAt: order.created_at,
     updatedAt: order.updated_at,
-    seller: mapSellerSummary(order.seller),
+    seller: mapSellerSummary(
+      order.seller,
+      null,
+      trustBySellerId.get(order.seller?.id),
+    ),
     items: (order.items || []).map((item) => ({
       id: item.id,
       productId: item.productId,
@@ -412,6 +424,8 @@ const getCustomerOrderDetails = async (req) => {
     throw AppError.fail("Order not found.", 404);
   }
 
+  const orderTrust = await getSellerOrderTrustStats(order.seller?.id);
+
   return {
     order: {
       id: order.id,
@@ -422,7 +436,7 @@ const getCustomerOrderDetails = async (req) => {
       createdAt: order.created_at,
       updatedAt: order.updated_at,
       canCancel: order.status === ORDER_STATUSES.PENDING_REVIEW,
-      seller: mapSellerSummary(order.seller),
+      seller: mapSellerSummary(order.seller, null, orderTrust),
       items: (order.items || []).map((item) => ({
         id: item.id,
         productId: item.productId,

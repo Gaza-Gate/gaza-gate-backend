@@ -13,10 +13,22 @@ const USER_ROLES = require("../../constants/user/userRoles.constant.js");
 const NOTIFICATION_TYPES = require("../../constants/notification/notificationTypes.constant.js");
 const AppError = require("../../utils/http/AppError.util.js");
 const { isUserInConversationRoom } = require("../../socket/utils/room.util.js");
-const { buildSellerStoreActionUrl } = require("../../utils/navigation/sellerStoreLink.util.js");
+const {
+  buildSellerStoreActionUrl,
+  computeIsTrustedSeller,
+} = require("../../utils/navigation/sellerStoreLink.util.js");
 const {
   buildCustomerProfileActionUrl,
+  computeIsTrustedBuyer,
 } = require("../../utils/navigation/customerProfileLink.util.js");
+const {
+  getSellersOrderTrustStats,
+  getSellerOrderTrustStats,
+} = require("../../utils/navigation/sellerTrustStats.util.js");
+const {
+  getCustomersOrderTrustStats,
+  getCustomerOrderTrustStats,
+} = require("../../utils/navigation/customerTrustStats.util.js");
 
 const getSocketUtils = () => require("../../config/socket.config.js");
 const getNotificationService = () =>
@@ -96,7 +108,13 @@ const loadConversationOrFail = async (conversationId) => {
 
 const buildOtherParty = (
   user,
-  { storeName = null, sellerId = null, customerId = null } = {},
+  {
+    storeName = null,
+    sellerId = null,
+    customerId = null,
+    isTrustedSeller = null,
+    isTrustedBuyer = null,
+  } = {},
 ) => {
   const otherParty = {
     id: user.id,
@@ -109,11 +127,13 @@ const buildOtherParty = (
   if (sellerId) {
     otherParty.sellerId = sellerId;
     otherParty.actionUrl = buildSellerStoreActionUrl(sellerId);
+    otherParty.isTrustedSeller = !!isTrustedSeller;
   }
 
   if (customerId) {
     otherParty.customerId = customerId;
     otherParty.actionUrl = buildCustomerProfileActionUrl(customerId);
+    otherParty.isTrustedBuyer = !!isTrustedBuyer;
   }
 
   return otherParty;
@@ -274,6 +294,8 @@ const mapConversationListItem = (
       storeName: sellerInfo?.storeName || null,
       sellerId: sellerInfo?.id || null,
       customerId: customerInfo?.id || null,
+      isTrustedSeller: sellerInfo?.isTrustedSeller ?? null,
+      isTrustedBuyer: customerInfo?.isTrustedBuyer ?? null,
     }),
     lastMessage: conversation.lastMessage
       ? {
@@ -354,7 +376,7 @@ const listConversations = async (userId, role, query = {}) => {
     sellerUserIds.length
       ? Seller.findAll({
           where: { userId: sellerUserIds },
-          attributes: ["id", "userId", "storeName"],
+          attributes: ["id", "userId", "storeName", "rating", "ratingCount"],
         })
       : Promise.resolve([]),
     customerUserIds.length
@@ -365,13 +387,35 @@ const listConversations = async (userId, role, query = {}) => {
       : Promise.resolve([]),
   ]);
 
+  const [trustBySellerId, trustByCustomerId] = await Promise.all([
+    getSellersOrderTrustStats(sellers.map((seller) => seller.id)),
+    getCustomersOrderTrustStats(customers.map((customer) => customer.id)),
+  ]);
+
   const sellerByUserId = sellers.reduce((acc, seller) => {
-    acc[seller.userId] = { id: seller.id, storeName: seller.storeName };
+    const orderTrust = trustBySellerId.get(seller.id);
+    acc[seller.userId] = {
+      id: seller.id,
+      storeName: seller.storeName,
+      isTrustedSeller: computeIsTrustedSeller({
+        rating: seller.rating,
+        ratingCount: seller.ratingCount,
+        completedOrders: orderTrust?.completedOrders,
+        completionRate: orderTrust?.completionRate,
+      }),
+    };
     return acc;
   }, {});
 
   const customerByUserId = customers.reduce((acc, customer) => {
-    acc[customer.userId] = { id: customer.id };
+    const orderTrust = trustByCustomerId.get(customer.id);
+    acc[customer.userId] = {
+      id: customer.id,
+      isTrustedBuyer: computeIsTrustedBuyer({
+        completedOrders: orderTrust?.completedOrders,
+        completionRate: orderTrust?.completionRate,
+      }),
+    };
     return acc;
   }, {});
 
@@ -453,22 +497,43 @@ const getOtherPartyForConversation = async (conversation, userId) => {
   let storeName = null;
   let sellerId = null;
   let customerId = null;
+  let isTrustedSeller = null;
+  let isTrustedBuyer = null;
   if (isCustomer) {
     const seller = await Seller.findOne({
       where: { userId: otherUserId },
-      attributes: ["id", "storeName"],
+      attributes: ["id", "storeName", "rating", "ratingCount"],
     });
     storeName = seller?.storeName || null;
     sellerId = seller?.id || null;
+    if (seller?.id) {
+      const orderTrust = await getSellerOrderTrustStats(seller.id);
+      isTrustedSeller = computeIsTrustedSeller({
+        rating: seller.rating,
+        ratingCount: seller.ratingCount,
+        completedOrders: orderTrust.completedOrders,
+        completionRate: orderTrust.completionRate,
+      });
+    }
   } else {
     const customer = await Customer.findOne({
       where: { userId: otherUserId },
       attributes: ["id"],
     });
     customerId = customer?.id || null;
+    if (customer?.id) {
+      const orderTrust = await getCustomerOrderTrustStats(customer.id);
+      isTrustedBuyer = computeIsTrustedBuyer(orderTrust);
+    }
   }
 
-  return buildOtherParty(otherUser, { storeName, sellerId, customerId });
+  return buildOtherParty(otherUser, {
+    storeName,
+    sellerId,
+    customerId,
+    isTrustedSeller,
+    isTrustedBuyer,
+  });
 };
 
 const getConversation = async (userId, conversationId, query = {}) => {
