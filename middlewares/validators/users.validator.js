@@ -1,4 +1,4 @@
-const AppError= require("../../utils/http/appError.util.js");
+const AppError= require("../../utils/http/AppError.util.js");
 
 const { query, param, body } = require('express-validator');
  
