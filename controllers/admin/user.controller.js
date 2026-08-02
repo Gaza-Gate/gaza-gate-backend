@@ -55,23 +55,15 @@ const getAllUsers = async (req, res) => {
 //   );
 // };
 
-// const updateUser = async (req, res) => {
-//   const userId = req.params.userId;
-//   const updatedUser = await userServices.updateUser(userId, req.body);
-
-//   if(!updatedUser){
-//     apiResponse.sendFail(
-//       res,
-//       data: { user: "User not found!" },
-//       404
-//     );
-//   }
-
-//   apiResponse.sendSuccess(
-//     res,
-//     data: { user: updatedUser },
-//   );
-// };
+const updateUserStatus = async (req, res) => {
+  const data = await userServices.updateUserStatus(
+    req.user.id,          
+    req.params.userId,
+    req.body.status
+  );
+  return apiResponse.sendSuccess(res, data, 200);
+};
+ 
 
 // const deleteAllUsers = async (req, res) => {
 //   const result = await userServices.deleteAllUsers();
@@ -100,4 +92,4 @@ const getAllUsers = async (req, res) => {
 //   );
 // };
 
-module.exports={getAllUsers}
+module.exports={getAllUsers,updateUserStatus}
