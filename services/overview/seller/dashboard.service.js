@@ -11,14 +11,25 @@ const AppError = require("../../../utils/http/AppError.util.js");
 const Order = require("../../../models/order.model.js");
 const ORDER_STATUSES = require("../../../constants/order/orderStatuses.constant.js");
 const { mapCustomerSummary } = require("../../../utils/navigation/customerProfileLink.util.js");
+const { mapSellerSummary } = require("../../../utils/navigation/sellerStoreLink.util.js");
 const {
   getCustomersOrderTrustStats,
 } = require("../../../utils/navigation/customerTrustStats.util.js");
+const {
+  getSellerOrderTrustStats,
+} = require("../../../utils/navigation/sellerTrustStats.util.js");
 
 const getDashboard = async (userId) => {
   const seller = await Seller.findOne({
     where: { userId: userId },
-    attributes: ["id", "rating", "ratingCount"],
+    attributes: ["id", "storeName", "rating", "ratingCount"],
+    include: [
+      {
+        model: User,
+        as: "user",
+        attributes: ["avatar"],
+      },
+    ],
   });
   if (!seller) throw AppError.fail("Seller not found", 404);
 
@@ -37,26 +48,35 @@ const getDashboard = async (userId) => {
         where: { sellerId: seller.id, status: UserStatus.ACTIVE },
       }),
     ]);
-  const reviews = await Review.findAll({
-    where: { sellerId: seller.id },
-    attributes: ["rating", "comment", ["created_at", "createdAt"]],
-    include: [
-      {
-        model: Customer,
-        as: "customer",
-        attributes: ["id"],
-        include: [
-          {
-            model: User,
-            as: "user",
-            attributes: ["firstName", "lastName", "avatar"],
-          },
-        ],
-      },
-    ],
-    order: [["createdAt", "DESC"]],
-    limit: 3,
-  });
+  const [reviews, sellerOrderTrust] = await Promise.all([
+    Review.findAll({
+      where: { sellerId: seller.id },
+      attributes: [
+        "rating",
+        "comment",
+        "sellerReply",
+        "sellerRepliedAt",
+        ["created_at", "createdAt"],
+      ],
+      include: [
+        {
+          model: Customer,
+          as: "customer",
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["firstName", "lastName", "avatar"],
+            },
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: 3,
+    }),
+    getSellerOrderTrustStats(seller.id),
+  ]);
 
   const distributionRating = await Review.findAll({
     where: { sellerId: seller.id },
@@ -75,6 +95,12 @@ const getDashboard = async (userId) => {
     reviews.map((r) => r.customer?.id).filter(Boolean),
   );
 
+  const sellerSummary = mapSellerSummary(
+    seller,
+    seller.user,
+    sellerOrderTrust,
+  );
+
   const formattedReviews = reviews.map((r) => {
     const customer = mapCustomerSummary(
       r.customer,
@@ -89,7 +115,11 @@ const getDashboard = async (userId) => {
       customer,
       rating: r.rating,
       comment: r.comment,
+      sellerReply: r.sellerReply ?? null,
+      sellerRepliedAt: r.sellerRepliedAt ?? null,
+      seller: sellerSummary,
       date: r.dataValues.createdAt.toISOString().split("T")[0],
+      actionUrl: `/seller/reviews`,
     };
   });
 
@@ -139,6 +169,7 @@ const getDashboard = async (userId) => {
       customer,
       status: order.status,
       total: order.totalPrice,
+      actionUrl: `/seller/orders/${order.id}`,
     };
   });
 

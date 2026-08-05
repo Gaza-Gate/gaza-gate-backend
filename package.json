@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon server.js",
-    "test": "jest",
+    "test": "jest --runInBand --forceExit",
+    "test:order-totals": "jest tests/unit/orderTotals.util.test.js tests/unit/order.totals.services.test.js --runInBand --forceExit",
+    "test:seller-reply": "jest tests/unit/review.sellerReply.test.js tests/unit/dashboard.reviews.test.js tests/unit/publicCustomer.sellerReply.test.js tests/unit/product.reviewPreview.test.js --runInBand --forceExit",
+    "test:updates": "jest tests/unit/orderTotals.util.test.js tests/unit/order.totals.services.test.js tests/unit/review.sellerReply.test.js tests/unit/dashboard.reviews.test.js tests/unit/publicCustomer.sellerReply.test.js tests/unit/product.reviewPreview.test.js --runInBand --forceExit",
     "test:trusted-seller": "jest tests/unit/sellerStoreLink.util.test.js tests/integration/trustedSeller.e2e.test.js --runInBand --forceExit",
     "test:trusted-buyer": "jest tests/unit/customerProfileLink.util.test.js tests/integration/trustedBuyer.e2e.test.js --runInBand --forceExit"
   },

@@ -22,6 +22,7 @@ const {
   getCustomersOrderTrustStats,
   getCustomerOrderTrustStats,
 } = require("../../utils/navigation/customerTrustStats.util.js");
+const { computeOrderTotals } = require("../../utils/order/orderTotals.util.js");
 
 const getSellerFromRequest = async (req) => {
   const userId = req.user?.id || req.user?.userId || null;
@@ -206,10 +207,19 @@ const getOrderDetails = async (req) => {
     orderTrust,
   );
   const orderJson = order.toJSON();
+  const totals = computeOrderTotals({
+    items: orderJson.items || [],
+    discountAmount: orderJson.discountAmount,
+    shippingFee: orderJson.shippingFee,
+  });
 
   return {
     order: {
       ...orderJson,
+      subtotal: totals.subtotal,
+      discountAmount: totals.discountAmount,
+      shippingFee: totals.shippingFee,
+      totalPrice: totals.totalPrice,
       customer: customerSummary
         ? {
             ...customerSummary,

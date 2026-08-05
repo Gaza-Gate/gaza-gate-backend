@@ -43,16 +43,23 @@ const sellerSummaryInclude = {
   ],
 };
 
-const mapProductReviewPreview = (review, orderTrust = null) => ({
+const mapProductReviewPreview = (review, customerTrust = null, sellerTrust = null) => ({
   id: review.id,
   rating: review.rating,
   comment: review.comment,
   imageUrl: review.imageUrl ?? null,
+  sellerReply: review.sellerReply ?? null,
+  sellerRepliedAt: review.sellerRepliedAt ?? null,
   createdAt: review.get("createdAt"),
   customer: mapCustomerSummary(
     review.customer,
     review.customer?.user,
-    orderTrust,
+    customerTrust,
+  ),
+  seller: mapSellerSummary(
+    review.seller,
+    review.seller?.user,
+    sellerTrust,
   ),
 });
 
@@ -64,6 +71,8 @@ const getProductReviewsPreview = async (productId) => {
       "rating",
       "comment",
       "imageUrl",
+      "sellerReply",
+      "sellerRepliedAt",
       ["created_at", "createdAt"],
     ],
     include: [
@@ -79,19 +88,26 @@ const getProductReviewsPreview = async (productId) => {
           },
         ],
       },
+      sellerSummaryInclude,
     ],
     order: [["created_at", "DESC"]],
     limit: RECENT_REVIEWS_LIMIT,
   });
 
-  const trustByCustomerId = await getCustomersOrderTrustStats(
-    rows.map((review) => review.customer?.id).filter(Boolean),
-  );
+  const [trustByCustomerId, trustBySellerId] = await Promise.all([
+    getCustomersOrderTrustStats(
+      rows.map((review) => review.customer?.id).filter(Boolean),
+    ),
+    getSellersOrderTrustStats(
+      rows.map((review) => review.seller?.id).filter(Boolean),
+    ),
+  ]);
 
   return rows.map((review) =>
     mapProductReviewPreview(
       review,
       trustByCustomerId.get(review.customer?.id),
+      trustBySellerId.get(review.seller?.id),
     ),
   );
 };

@@ -21,6 +21,7 @@ const {
   getSellersOrderTrustStats,
   getSellerOrderTrustStats,
 } = require("../../utils/navigation/sellerTrustStats.util.js");
+const { computeOrderTotals } = require("../../utils/order/orderTotals.util.js");
 
 const sellerSummaryInclude = {
   model: Seller,
@@ -81,76 +82,84 @@ const createOrder = async (req) => {
     order: [["created_at", "ASC"]],
   });
 
-  const cart = await Cart.findOne({
-    where: { customerId: customer.id },
-    include: [
-      {
-        model: CartItem,
-        as: "items",
-        include: [
-          {
-            model: Product,
-            as: "product",
-            attributes: [
-              "id",
-              "name",
-              "price",
-              "stockType",
-              "quantity",
-              "status",
-              "isDeleted",
-              "sellerId",
-            ],
-          },
-        ],
-      },
-    ],
-  });
-
-  if (!cart || !cart.items?.length) {
-    throw AppError.fail("Your cart is empty.", 400);
-  }
-
-  const itemsBySeller = {};
-  for (const item of cart.items) {
-    const product = item.product;
-    if (
-      !product ||
-      product.isDeleted ||
-      product.status !== PRODUCT_STATUS.ACTIVE
-    ) {
-      throw AppError.fail(
-        `Product "${product?.name || "unknown"}" is no longer available.`,
-        400,
-      );
-    }
-
-    const sellerId = product.sellerId;
-    if (!itemsBySeller[sellerId]) {
-      itemsBySeller[sellerId] = [];
-    }
-    itemsBySeller[sellerId].push(item);
-  }
-
-  const customerUserId = req.user?.id || req.user?.userId;
-  const sellerIds = Object.keys(itemsBySeller);
-  const sellers = await Seller.findAll({
-    where: { id: sellerIds },
-    attributes: ["id", "userId"],
-  });
-  for (const seller of sellers) {
-    if (seller.userId === customerUserId) {
-      throw AppError.fail("You cannot order from your own store.", 400);
-    }
-  }
-
   const createdOrders = [];
   const transaction = await sequelize.transaction();
 
   try {
+    // Lock the cart row so concurrent checkouts for the same customer serialize.
+    // The second request waits here, then sees an empty cart after the first commits.
+    const cart = await Cart.findOne({
+      where: { customerId: customer.id },
+      attributes: ["id"],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!cart) {
+      throw AppError.fail("Your cart is empty.", 400);
+    }
+
+    const cartItems = await CartItem.findAll({
+      where: { cartId: cart.id },
+      include: [
+        {
+          model: Product,
+          as: "product",
+          attributes: [
+            "id",
+            "name",
+            "price",
+            "stockType",
+            "quantity",
+            "status",
+            "isDeleted",
+            "sellerId",
+          ],
+        },
+      ],
+      transaction,
+    });
+
+    if (!cartItems.length) {
+      throw AppError.fail("Your cart is empty.", 400);
+    }
+
+    const itemsBySeller = {};
+    for (const item of cartItems) {
+      const product = item.product;
+      if (
+        !product ||
+        product.isDeleted ||
+        product.status !== PRODUCT_STATUS.ACTIVE
+      ) {
+        throw AppError.fail(
+          `Product "${product?.name || "unknown"}" is no longer available.`,
+          400,
+        );
+      }
+
+      const sellerId = product.sellerId;
+      if (!itemsBySeller[sellerId]) {
+        itemsBySeller[sellerId] = [];
+      }
+      itemsBySeller[sellerId].push(item);
+    }
+
+    const customerUserId = req.user?.id || req.user?.userId;
+    const sellerIds = Object.keys(itemsBySeller);
+    const sellers = await Seller.findAll({
+      where: { id: sellerIds },
+      attributes: ["id", "userId"],
+      transaction,
+    });
+    for (const seller of sellers) {
+      if (seller.userId === customerUserId) {
+        throw AppError.fail("You cannot order from your own store.", 400);
+      }
+    }
+
     for (const sellerId of sellerIds) {
       const sellerItems = itemsBySeller[sellerId];
-      let totalPrice = 0;
 
       const validatedItems = [];
       for (const item of sellerItems) {
@@ -191,14 +200,24 @@ const createOrder = async (req) => {
           );
         }
 
-        const lineTotal = Number(productInDb.price) * item.quantity;
-        totalPrice += lineTotal;
+        const unitPrice = Number(productInDb.price);
+        const lineTotal = unitPrice * item.quantity;
         validatedItems.push({
           item,
           product: productInDb,
+          unitPrice,
+          quantity: item.quantity,
           lineTotal,
         });
       }
+
+      const discountAmount = 0;
+      const shippingFee = 0;
+      const { subtotal, totalPrice } = computeOrderTotals({
+        items: validatedItems,
+        discountAmount,
+        shippingFee,
+      });
 
       const order = await Order.create(
         {
@@ -210,19 +229,22 @@ const createOrder = async (req) => {
           shippingNeighborhood: customerAddress?.neighborhood || "N/A",
           shippingStreet: customerAddress?.street || "N/A",
           shippingNotes: customerAddress?.notes || null,
-          totalPrice: Number(totalPrice.toFixed(2)),
+          subtotal,
+          discountAmount,
+          shippingFee,
+          totalPrice,
         },
         { transaction },
       );
 
       for (const entry of validatedItems) {
-        const { item, product, lineTotal } = entry;
+        const { item, product, unitPrice, lineTotal } = entry;
         await OrderItem.create(
           {
             orderId: order.id,
             productId: product.id,
             productName: product.name,
-            unitPrice: Number(product.price),
+            unitPrice,
             quantity: item.quantity,
             lineTotal: Number(lineTotal.toFixed(2)),
           },
@@ -243,6 +265,7 @@ const createOrder = async (req) => {
         id: order.id,
         orderNumber: order.orderNumber,
         status: order.status,
+        subtotal: Number(order.subtotal),
         totalPrice: Number(order.totalPrice),
         sellerId: order.sellerId,
         itemsCount: validatedItems.length,
@@ -426,26 +449,37 @@ const getCustomerOrderDetails = async (req) => {
 
   const orderTrust = await getSellerOrderTrustStats(order.seller?.id);
 
+  const items = (order.items || []).map((item) => ({
+    id: item.id,
+    productId: item.productId,
+    productName: item.productName,
+    unitPrice: Number(item.unitPrice),
+    quantity: item.quantity,
+    lineTotal: Number(item.lineTotal),
+    primaryImage: item.product?.images?.[0]?.imageUrl || null,
+  }));
+
+  const totals = computeOrderTotals({
+    items,
+    discountAmount: order.discountAmount,
+    shippingFee: order.shippingFee,
+  });
+
   return {
     order: {
       id: order.id,
       orderNumber: order.orderNumber,
       status: order.status,
-      totalPrice: Number(order.totalPrice),
+      subtotal: totals.subtotal,
+      discountAmount: totals.discountAmount,
+      shippingFee: totals.shippingFee,
+      totalPrice: totals.totalPrice,
       paymentMethod: order.paymentMethod,
       createdAt: order.created_at,
       updatedAt: order.updated_at,
       canCancel: order.status === ORDER_STATUSES.PENDING_REVIEW,
       seller: mapSellerSummary(order.seller, null, orderTrust),
-      items: (order.items || []).map((item) => ({
-        id: item.id,
-        productId: item.productId,
-        productName: item.productName,
-        unitPrice: Number(item.unitPrice),
-        quantity: item.quantity,
-        lineTotal: Number(item.lineTotal),
-        primaryImage: item.product?.images?.[0]?.imageUrl || null,
-      })),
+      items,
     },
   };
 };

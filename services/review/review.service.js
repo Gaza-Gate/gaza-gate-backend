@@ -30,6 +30,7 @@ const {
 } = require("../../utils/navigation/customerTrustStats.util.js");
 const {
   getSellersOrderTrustStats,
+  getSellerOrderTrustStats,
 } = require("../../utils/navigation/sellerTrustStats.util.js");
 
 const assertWithinEditWindow = (createdAt) => {
@@ -406,7 +407,14 @@ const getSellerRatingStats = async (sellerId) => {
 const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
   const seller = await Seller.findOne({
     where: { id: sellerId },
-    attributes: ["id", "rating", "ratingCount"],
+    attributes: ["id", "storeName", "rating", "ratingCount"],
+    include: [
+      {
+        model: User,
+        as: "user",
+        attributes: ["avatar"],
+      },
+    ],
   });
   if (!seller) {
     throw AppError.fail("Seller not found.", 404);
@@ -422,7 +430,7 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
     where.rating = parsedRating;
   }
 
-  const [{ count, rows }, distribution] = await Promise.all([
+  const [{ count, rows }, distribution, sellerOrderTrust] = await Promise.all([
     Review.findAndCountAll({
       where,
       attributes: [
@@ -430,8 +438,8 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
         "rating",
         "comment",
         "imageUrl",
-        'sellerReply',
-        'sellerRepliedAt',
+        "sellerReply",
+        "sellerRepliedAt",
         ["created_at", "createdAt"],
       ],
       include: [
@@ -459,10 +467,17 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
       distinct: true,
     }),
     getSellerRatingStats(seller.id),
+    getSellerOrderTrustStats(seller.id),
   ]);
 
   const trustByCustomerId = await getCustomersOrderTrustStats(
     rows.map((review) => review.customer?.id).filter(Boolean),
+  );
+
+  const sellerSummary = mapSellerSummary(
+    seller,
+    seller.user,
+    sellerOrderTrust,
   );
 
   const reviews = rows.map((review) => {
@@ -471,14 +486,15 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
       rating: review.rating,
       comment: review.comment,
       imageUrl: review.imageUrl ?? null,
-      sellerReply:review.sellerReply ?? null,
-      sellerRepliedAt:review.sellerRepliedAt ?? null,
+      sellerReply: review.sellerReply ?? null,
+      sellerRepliedAt: review.sellerRepliedAt ?? null,
       createdAt: review.get("createdAt"),
       customer: mapCustomerSummary(
         review.customer,
         review.customer?.user,
         trustByCustomerId.get(review.customer?.id),
       ),
+      seller: sellerSummary,
       product: review.product
         ? { id: review.product.id, name: review.product.name }
         : null,
@@ -535,6 +551,8 @@ const getProductReviews = async (productId, query = {}) => {
         "rating",
         "comment",
         "imageUrl",
+        "sellerReply",
+        "sellerRepliedAt",
         ["created_at", "createdAt"],
       ],
       include: [
@@ -550,6 +568,18 @@ const getProductReviews = async (productId, query = {}) => {
             },
           ],
         },
+        {
+          model: Seller,
+          as: "seller",
+          attributes: ["id", "storeName", "rating", "ratingCount"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["avatar"],
+            },
+          ],
+        },
       ],
       order: [["created_at", "DESC"]],
       limit,
@@ -559,9 +589,14 @@ const getProductReviews = async (productId, query = {}) => {
     getRatingDistribution({ productId: product.id }),
   ]);
 
-  const trustByCustomerId = await getCustomersOrderTrustStats(
-    rows.map((review) => review.customer?.id).filter(Boolean),
-  );
+  const [trustByCustomerId, trustBySellerId] = await Promise.all([
+    getCustomersOrderTrustStats(
+      rows.map((review) => review.customer?.id).filter(Boolean),
+    ),
+    getSellersOrderTrustStats(
+      rows.map((review) => review.seller?.id).filter(Boolean),
+    ),
+  ]);
 
   const reviews = rows.map((review) => {
     return {
@@ -569,11 +604,18 @@ const getProductReviews = async (productId, query = {}) => {
       rating: review.rating,
       comment: review.comment,
       imageUrl: review.imageUrl ?? null,
+      sellerReply: review.sellerReply ?? null,
+      sellerRepliedAt: review.sellerRepliedAt ?? null,
       createdAt: review.get("createdAt"),
       customer: mapCustomerSummary(
         review.customer,
         review.customer?.user,
         trustByCustomerId.get(review.customer?.id),
+      ),
+      seller: mapSellerSummary(
+        review.seller,
+        review.seller?.user,
+        trustBySellerId.get(review.seller?.id),
       ),
     };
   });

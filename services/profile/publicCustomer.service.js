@@ -84,6 +84,8 @@ const mapCustomerReview = (review, orderTrust = null) => {
     rating: review.rating,
     comment: review.comment,
     imageUrl: review.imageUrl ?? null,
+    sellerReply: review.sellerReply ?? null,
+    sellerRepliedAt: review.sellerRepliedAt ?? null,
     createdAt: review.get("createdAt"),
     product: product
       ? {
@@ -324,6 +326,8 @@ const getPublicCustomerReviews = async (customerId, query = {}) => {
       "rating",
       "comment",
       "imageUrl",
+      "sellerReply",
+      "sellerRepliedAt",
       ["created_at", "createdAt"],
     ],
     include: [reviewProductInclude, reviewSellerInclude],
