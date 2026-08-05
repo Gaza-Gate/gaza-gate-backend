@@ -72,6 +72,20 @@ const sellerLocalLogin = async (req, res) => {
   );
 };
 
+const adminLocalLogin = async (req, res) => {
+  const result = await authService.localLogin(req.body, userRoles.ADMIN);
+  res.cookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
+
+  return apiResponse.sendSuccess(
+    res,
+    {
+      accessToken: result.accessToken,
+      user: result.user,
+    },
+    200,
+  );
+};
+
 const resendVerificationCode = async (req, res) => {
   const result = await authService.resendVerificationCode(req.body);
 
@@ -279,6 +293,7 @@ module.exports = {
   verifyEmail,
   customerLocalLogin,
   sellerLocalLogin,
+  adminLocalLogin,
   resendVerificationCode,
   forgotPassword,
   verifyResetCode,

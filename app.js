@@ -26,6 +26,8 @@ const apiResponse = require("./utils/http/apiResponse.util.js");
 const errorHandler = require("./middlewares/common/errorHandler.middleware.js");
 const adminCategoryRoute = require("./routes/admin/category.route.js");
 const adminUserRoute = require("./routes/admin/user.route.js");
+const adminProductRoute = require("./routes/admin/product.route.js");
+const adminDashboardRoute = require("./routes/admin/dashboard.route.js");
 const sellerStoreRoute = require("./routes/customer/sellerStore.route.js");
 const sharedReviewRoute = require("./routes/shared/review.route.js");
 
@@ -33,7 +35,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["https://gaza-gate-frontend.vercel.app", "http://localhost:3000"],
+    origin: ["https://gaza-gate-frontend.vercel.app","https://gaza-gate-frontend-git-development-aya-sehwils-projects.vercel.app", "http://localhost:3000"],
     credentials: true,
   }),
 );
@@ -63,6 +65,8 @@ app.use("/api/seller/chatbot", sellerChatbotRoute);
 app.use("/api/conversations", conversationRoute);
 app.use("/api/admin/category", adminCategoryRoute);
 app.use("/api/admin/user", adminUserRoute);
+app.use("/api/admin/product", adminProductRoute);
+app.use("/api/admin/dashboard", adminDashboardRoute);
 app.use("/api/customer/store", sellerStoreRoute);
 
 app.use((req, res, next) => {

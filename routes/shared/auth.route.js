@@ -50,6 +50,14 @@ router.post(
 );
 
 router.post(
+  "/admin/local/login",
+  filterBody(["email", "password"]),
+  authValidator.localLoginValidator,
+  requestsValidator,
+  asyncWrapper(authController.adminLocalLogin),
+);
+
+router.post(
   "/verify-email",
   filterBody(["email", "code"]),
   authValidator.verifyEmailValidator,

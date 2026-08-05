@@ -170,18 +170,34 @@ const updateAllUsers = async (data) => {
   return result;
 };
 
-const updateUser = async (userId, data) => {
-  const updatedUser = await User.findByIdAndUpdate(
+const updateUserStatus = async (adminId, userId, status) => {
+  if (adminId === userId) {
+    throw AppError.fail("You cannot change your own status", 400);
+  }
+ 
+  const user = await User.findOne({
+    where:      { id: userId },
+    attributes: ['id', 'status', 'firstName', 'lastName'],
+  });
+  if (!user) throw AppError.fail('User not found', 404);
+ 
+  if (user.status === status) {
+    throw AppError.fail(
+     'User already has this status',
+      400
+    );
+  }
+ 
+  await user.update({ status });
+ 
+  return {
     userId,
-    { $set: data },
-    { new: true, runValidators: true },
-  );
-  return updatedUser;
-};
-
-const deleteAllUsers = async () => {
-  const result = await User.deleteMany({});
-  return result;
+    fullName:  `${user.firstName} ${user.lastName}`,
+    newStatus: status,
+    message:   status === 'active'
+      ? 'تم تفعيل الحساب بنجاح'
+      : 'تم تعليق الحساب بنجاح',
+  };
 };
 
 const deleteUser = async (userId) => {
@@ -191,12 +207,6 @@ const deleteUser = async (userId) => {
 
 module.exports = {
   getAllUsers,
-  getUserById,
-  getUserByEmail,
-  getUserByEmailWithPassword,
-  createUser,
-  updateAllUsers,
-  updateUser,
-  deleteAllUsers,
-  deleteUser,
+  updateUserStatus,
+
 };

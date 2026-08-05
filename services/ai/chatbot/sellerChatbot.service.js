@@ -79,6 +79,10 @@ const chat = async (userId, message, sessionId, file) => {
   await ensureSeller(userId);
   const trimmedMessage = (message || "").trim();
 
+  if (!trimmedMessage && !file) {
+    throw AppError.fail("Message or product image is required", 400);
+  }
+
   let session;
   let messageCount;
 

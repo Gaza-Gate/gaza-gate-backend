@@ -3,12 +3,15 @@ const dashboardService = require("../../overview/seller/dashboard.service.js");
 const productService = require("../../catalog/product.service.js");
 const orderService = require("../../order/order.service.js");
 const categoryService = require("../../catalog/category.service.js");
+const conversationService = require("../../conversation/conversation.service.js");
+const notificationService = require("../../notification/notification.service.js");
 const Category = require("../../../models/category.model.js");
 const imageTokenService = require("./sellerChatbotImageToken.service.js");
 const {
   SELLER_CHATBOT_TOOLS,
 } = require("../../../constants/chatbot/sellerChatbot.constant.js");
 const ORDER_STATUSES = require("../../../constants/order/orderStatuses.constant.js");
+const NOTIFICATION_TYPES = require("../../../constants/notification/notificationTypes.constant.js");
 const USER_ROLES = require("../../../constants/user/userRoles.constant.js");
 const AppError = require("../../../utils/http/AppError.util.js");
 
@@ -56,6 +59,14 @@ const buildActionSummary = (toolName, result) => {
       return `Product ${data.productId} → ${data.status}`;
     case SELLER_CHATBOT_TOOLS.CREATE_PRODUCT:
       return `Product "${data.name}" created`;
+    case SELLER_CHATBOT_TOOLS.LIST_CONVERSATIONS:
+      return `Listed ${data.conversations?.length || 0} conversation(s)`;
+    case SELLER_CHATBOT_TOOLS.GET_CONVERSATION:
+      return `Opened conversation ${data.conversation?.id || ""}`;
+    case SELLER_CHATBOT_TOOLS.REPLY_TO_CUSTOMER:
+      return `Replied in conversation ${data.message?.conversationId || data.conversationId || ""}`;
+    case SELLER_CHATBOT_TOOLS.LIST_NOTIFICATIONS:
+      return `Listed ${data.notifications?.length || 0} notification(s) (${data.stats?.unRead || 0} unread)`;
     default:
       return toolName;
   }
@@ -194,22 +205,37 @@ const executors = {
       ),
     ),
 
-  // Future plug-in: replace with real messaging service calls.
-  [SELLER_CHATBOT_TOOLS.LIST_CONVERSATIONS]: () =>
-    Promise.resolve({
-      success: false,
-      error: "messaging_not_integrated",
-      message:
-        "Customer messaging is not yet integrated with the chatbot. Use the dashboard messaging section when available.",
+  [SELLER_CHATBOT_TOOLS.LIST_CONVERSATIONS]: (userId, args) =>
+    runTool(userId, () =>
+      conversationService.listConversations(userId, USER_ROLES.SELLER, {
+        page: args.page,
+      }),
+    ),
+
+  [SELLER_CHATBOT_TOOLS.GET_CONVERSATION]: (userId, args) =>
+    runTool(userId, () =>
+      conversationService.getConversation(userId, args.conversationId, {
+        page: args.page,
+      }),
+    ),
+
+  [SELLER_CHATBOT_TOOLS.REPLY_TO_CUSTOMER]: (userId, args) =>
+    runTool(userId, async () => {
+      const message = await conversationService.sendMessage(
+        userId,
+        args.conversationId,
+        { content: args.content },
+      );
+      return { conversationId: args.conversationId, message };
     }),
 
-  [SELLER_CHATBOT_TOOLS.REPLY_TO_CUSTOMER]: () =>
-    Promise.resolve({
-      success: false,
-      error: "messaging_not_integrated",
-      message:
-        "Replying to customers via chatbot is not yet available. Use the dashboard messaging section when available.",
-    }),
+  [SELLER_CHATBOT_TOOLS.LIST_NOTIFICATIONS]: (userId, args) =>
+    runTool(userId, () =>
+      notificationService.getNotifications(userId, {
+        page: args.page,
+        type: args.type,
+      }),
+    ),
 };
 
 const getToolDefinitions = () => [
@@ -431,10 +457,36 @@ const getToolDefinitions = () => [
     type: "function",
     function: {
       name: SELLER_CHATBOT_TOOLS.LIST_CONVERSATIONS,
-      description: "List customer conversations (messaging).",
+      description:
+        "List the seller's customer chat conversations, including last message and unread count.",
       parameters: {
         type: "object",
-        properties: {},
+        properties: {
+          page: { type: "integer", description: "Page number" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SELLER_CHATBOT_TOOLS.GET_CONVERSATION,
+      description:
+        "Open a customer chat and return its messages. Use after listConversations when the seller wants to read a specific conversation.",
+      parameters: {
+        type: "object",
+        properties: {
+          conversationId: {
+            type: "string",
+            description: "Conversation UUID",
+          },
+          page: {
+            type: "integer",
+            description: "Message page (1 = newest page)",
+          },
+        },
+        required: ["conversationId"],
         additionalProperties: false,
       },
     },
@@ -447,10 +499,36 @@ const getToolDefinitions = () => [
       parameters: {
         type: "object",
         properties: {
-          conversationId: { type: "string" },
-          content: { type: "string" },
+          conversationId: {
+            type: "string",
+            description: "Conversation UUID",
+          },
+          content: {
+            type: "string",
+            description: "Reply text to send to the customer",
+          },
         },
         required: ["conversationId", "content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SELLER_CHATBOT_TOOLS.LIST_NOTIFICATIONS,
+      description:
+        "List the seller's notifications with unread stats. Optionally filter by type.",
+      parameters: {
+        type: "object",
+        properties: {
+          page: { type: "integer", description: "Page number" },
+          type: {
+            type: "string",
+            enum: Object.values(NOTIFICATION_TYPES),
+            description: "Filter by notification type",
+          },
+        },
         additionalProperties: false,
       },
     },
