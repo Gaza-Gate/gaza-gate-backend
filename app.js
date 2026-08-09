@@ -35,7 +35,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["https://gaza-gate-frontend.vercel.app","https://gaza-gate-frontend-git-development-aya-sehwils-projects.vercel.app", "http://localhost:3000"],
+    origin: ["https://gaza-gate-frontend.vercel.app","https://gaza-gate-frontend-git-development-aya-sehwils-projects.vercel.app", "http://localhost:3000", "https://gazagate.store"],
     credentials: true,
   }),
 );

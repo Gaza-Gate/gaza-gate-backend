@@ -341,12 +341,13 @@ Review.belongsTo(Product, {
 Order.hasMany(Review, {
   foreignKey: { name: "orderId", field: "order_id" },
   as: "reviews",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 Review.belongsTo(Order, {
   foreignKey: { name: "orderId", field: "order_id" },
   as: "order",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
