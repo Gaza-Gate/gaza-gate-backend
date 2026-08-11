@@ -5,7 +5,7 @@ const {
 } = require("./emailVerification.service");
 
 const createVerificationCode = async (userId, type, transaction = null) => {
-  const code = "111111";
+  const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
   await deleteEmailVerificationByUserId(userId, type, transaction);
