@@ -9,6 +9,9 @@ const Order = require("../../models/order.model.js");
 const passwordService = require("../../utils/security/password.util.js");
 const cloudinaryService = require("../integrations/cloudinary.service.js");
 const ORDER_STATUSES = require("../../constants/order/orderStatuses.constant.js");
+const {
+  prepareStoreDescription,
+} = require("../../utils/seller/storeDescription.util.js");
 
 const getSellerProfile = async (userId) => {
   const seller = await Seller.findOne({
@@ -98,7 +101,12 @@ const updateSellerProfile = async (userId, data, file) => {
   if (data.email) throw AppError.fail("Email cannot be updated", 400);
 
   for (const key in data) {
-    if (sellerFields.includes(key)) sellerData[key] = data[key];
+    if (sellerFields.includes(key)) {
+      sellerData[key] =
+        key === "storeDescription"
+          ? prepareStoreDescription(data[key])
+          : data[key];
+    }
     if (userFields.includes(key)) userData[key] = data[key];
     if (addressFields.includes(key)) addressData[key] = data[key];
   }

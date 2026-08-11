@@ -41,6 +41,9 @@ const {
   sendVerificationEmail,
   sendPasswordResetEmail,
 } = require("../../utils/email.util.js");
+const {
+  prepareStoreDescription,
+} = require("../../utils/seller/storeDescription.util.js");
 
 const localRegister = async (data, roleName, createProfile) => {
   const { firstName, lastName, email, password } = data;
@@ -128,7 +131,7 @@ const sellerLocalRegister = async (data) => {
         {
           userId,
           storeName: data.storeName,
-          storeDescription: data.storeDescription,
+          storeDescription: prepareStoreDescription(data.storeDescription),
         },
         { transaction },
       ),
@@ -860,7 +863,7 @@ const sellerGoogleRegisterComplete = async (data) => {
         {
           userId,
           storeName,
-          storeDescription,
+          storeDescription: prepareStoreDescription(storeDescription),
         },
         { transaction },
       ),
@@ -1068,7 +1071,7 @@ const becomeSeller = async (
         {
           userId: user.id,
           storeName,
-          storeDescription,
+          storeDescription: prepareStoreDescription(storeDescription),
         },
         { transaction },
       );

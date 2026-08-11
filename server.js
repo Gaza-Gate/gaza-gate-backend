@@ -11,7 +11,7 @@ async function startServer() {
   try {
     await connectDB();
 
-   //await sequelize.sync();
+    //await sequelize.sync();
     await seedRoles();
     await loadKnowledgeBase();
 

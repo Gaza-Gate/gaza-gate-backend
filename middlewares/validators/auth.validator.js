@@ -51,10 +51,10 @@ const sellerLocalRegisterValidator = [
     .isLength({ min: 2, max: 100 })
     .withMessage("Store name must be between 2 and 100 characters"),
   body("storeDescription")
-    .optional()
+    .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 500 })
-    .withMessage("Store description must not exceed 500 characters"),
+    .isLength({ min: 5, max: 500 })
+    .withMessage("Store description must be between 5 and 500 characters"),
 ];
 
 const verifyEmailValidator = [
@@ -157,8 +157,8 @@ const sellerCompleteRegistrationValidator = [
     .isLength({ min: 2, max: 100 })
     .withMessage("Store name must be between 2 and 100 characters"),
   body("storeDescription")
-    .notEmpty()
-    .withMessage("Store description is required")
+    .optional({ values: "falsy" })
+    .trim()
     .isLength({ min: 5, max: 500 })
     .withMessage("Store description must be between 5 and 500 characters"),
 ];
@@ -171,10 +171,10 @@ const becomeSellerValidator = [
     .isLength({ min: 2, max: 100 })
     .withMessage("Store name must be between 2 and 100 characters"),
   body("storeDescription")
-    .optional()
+    .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 500 })
-    .withMessage("Store description must not exceed 500 characters"),
+    .isLength({ min: 5, max: 500 })
+    .withMessage("Store description must be between 5 and 500 characters"),
 ];
 
 const switchRoleValidator = [
