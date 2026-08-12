@@ -1,5 +1,5 @@
 const PAGINATION = Object.freeze({
-  DEFAULT_LIMIT: 10,
+  DEFAULT_LIMIT: 12,
   DEFAULT_PAGE: 1,
 });
 
