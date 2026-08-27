@@ -11,10 +11,10 @@ const AI = Object.freeze({
   CHAT_COMPLETIONS_URL: `${baseUrl}/chat/completions`,
   // Customer and seller bots may need different model names (especially with
   // non-OpenRouter OpenAI-compatible base URLs).
-  CUSTOMER_CHAT_MODEL: "deepseek-v4-flash",
-  SELLER_CHAT_MODEL: "deepseek-v4-flash",
+  CUSTOMER_CHAT_MODEL: "openai/gpt-4o-mini",
+  SELLER_CHAT_MODEL: "openai/gpt-4o-mini",
 
-  CHAT_MODEL:"deepseek-v4-flash",
+  CHAT_MODEL:"openai/gpt-4o-mini",
   IMAGE_MODEL: process.env.AI_IMAGE_MODEL || "gemini-3.1-flash-image-preview",
   CUSTOMER_MAX_TOKENS: 512,
   SELLER_MAX_TOKENS: 1024,
