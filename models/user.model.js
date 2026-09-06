@@ -9,10 +9,19 @@ const User = sequelize.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    roleId: {
+    // Last-preferred / default role for NEW logins and DB-driven defaults.
+    // NOT live cross-device authorization — each request trusts JWT `role`;
+    // each device session stores its mode on RefreshToken.activeRoleId.
+    activeRoleId: {
       type: DataTypes.UUID,
       allowNull: false,
-      field: "role_id",
+      field: "active_role_id",
+    },
+    tokenVersion: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      field: "token_version",
     },
     firstName: {
       type: DataTypes.STRING(50),
@@ -109,7 +118,7 @@ const User = sequelize.define(
       },
     },
     indexes: [
-      { fields: ["role_id"] },
+      { fields: ["active_role_id"] },
       { fields: ["status"] },
       { fields: ["is_verified"] },
     ],

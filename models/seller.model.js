@@ -25,7 +25,16 @@ const Seller = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
       field: "store_description",
-      validate: { len: [5, 500] },
+      validate: {
+        lenIfPresent(value) {
+          if (value == null || value === "") return;
+          if (value.length < 5 || value.length > 500) {
+            throw new Error(
+              "Store description must be between 5 and 500 characters",
+            );
+          }
+        },
+      },
     },
     rating: {
       type: DataTypes.DECIMAL(3, 2),

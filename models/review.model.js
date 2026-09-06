@@ -26,7 +26,7 @@ const Review = sequelize.define(
     },
     orderId: {
       type: DataTypes.UUID,
-      allowNull: true,
+      allowNull: false,
       field: "order_id",
     },
     rating: {
@@ -39,7 +39,27 @@ const Review = sequelize.define(
     },
     comment: {
       type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    imageUrl: {
+      type: DataTypes.STRING(512),
       allowNull: true,
+      field: "image_url",
+    },
+    publicId: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      field: "public_id",
+    },
+    sellerReply: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "seller_reply",
+    },
+    sellerRepliedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "seller_replied_at",
     },
     isDeleted: {
       type: DataTypes.BOOLEAN,

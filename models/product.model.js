@@ -1,7 +1,7 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db.config.js");
-const PRODUCT_STOCK_TYPES = require("../constants/stockType.constants.js");
-const PRODUCT_STATUS = require("../constants/productStatus.constants.js");
+const PRODUCT_STOCK_TYPES = require("../constants/product/stockType.constant.js");
+const PRODUCT_STATUS = require("../constants/product/productStatus.constant.js");
 
 const Product = sequelize.define(
   "Product",

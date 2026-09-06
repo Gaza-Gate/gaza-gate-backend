@@ -1,9 +1,10 @@
 const { Resend } = require("resend");
-const AppError = require("../utils/AppError.util");
+const AppError = require("./http/AppError.util");
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_ADDRESS = "Gaza Gate <onboarding@resend.dev>";
+const FROM_ADDRESS =
+  process.env.RESEND_FROM_EMAIL || "Gaza Gate <noreply@mail.gazagate.store>";
 
 const sendEmail = async ({ to, subject, html }) => {
   const { data, error } = await resend.emails.send({

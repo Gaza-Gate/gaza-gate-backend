@@ -1,5 +1,5 @@
 const Role = require("../models/role.model");
-const USER_ROLES = require("../constants/userRoles.constant.js");
+const USER_ROLES = require("../constants/user/userRoles.constant.js");
 
 const seedRoles = async () => {
   const roles = Object.values(USER_ROLES);

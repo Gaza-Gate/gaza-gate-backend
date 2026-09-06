@@ -1,7 +1,7 @@
 const { Server } = require("socket.io");
-const token = require("../utils/token.util.js");
+const token = require("../utils/security/token.util.js");
 const User = require("../models/user.model.js");
-const UserStatus = require("../constants/userStatus.constant.js");
+const UserStatus = require("../constants/user/userStatus.constant.js");
 
 const registerConversationHandlers = require("../socket/handlers/conversation.handler.js");
 
@@ -10,7 +10,10 @@ let io = null;
 const initSocket = (httpServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin: ["https://gaza-gate-frontend.vercel.app", "http://localhost:3000"],
+      origin: [
+        "https://gaza-gate-frontend.vercel.app",
+        "http://localhost:3000",
+      ],
       credentials: true,
     },
   });
@@ -25,6 +28,12 @@ const initSocket = (httpServer) => {
       const user = await User.findByPk(decoded.userId);
       if (!user || user.status === UserStatus.BANNED) {
         return next(new Error("Account is banned or does not exist."));
+      }
+
+      const tokenVersionFromPayload = decoded.tokenVersion ?? 0;
+      const currentTokenVersion = user.tokenVersion ?? 0;
+      if (tokenVersionFromPayload !== currentTokenVersion) {
+        return next(new Error("Invalid or expired authentication token."));
       }
 
       socket.userId = decoded.userId;

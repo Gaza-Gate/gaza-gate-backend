@@ -1,0 +1,95 @@
+const userServices = require("../../services/identity/user.service.js");
+const apiResponse = require("../../utils/http/apiResponse.util.js");
+
+const getAllUsers = async (req, res) => {
+  const result = await userServices.getAllUsers(req);
+  return apiResponse.sendSuccess(res, result, 200);
+};
+
+// const getUser = async (req, res) => {
+//   const userId = req.params.userId;
+//   const user = await userServices.getUserById(userId);
+
+//   if(!user){
+//     apiResponse.sendFail(
+//       res,
+//       data: { user: "User not found!" },
+//       404
+//     );
+//   }
+
+//   apiResponse.sendSuccess(
+//     res,
+//     data: { user }
+//   );
+// };
+
+// const createUser = async (req, res) => {
+//   const oldUser = await userServices.getUserByEmail(req.body.email);
+
+//   if(oldUser){
+//     apiResponse.sendFail(
+//       res,
+//       data: { user: "User already exists!" }
+//     );
+//   }
+
+//   const newUser = await userServices.createUser(req.body);
+
+//   apiResponse.sendSuccess(
+//     res,
+//     data: { user: newUser },
+//     201
+//   );
+// };
+
+// const updateAllUsers = async (req, res) => {
+//   const result = await userServices.updateAllUsers(req.body);
+
+//   apiResponse.sendSuccess(
+//     res,
+//     data{
+//       matchedCount: result.matchedCount,
+//       modifiedCount: result.modifiedCount
+//     }
+//   );
+// };
+
+const updateUserStatus = async (req, res) => {
+  const data = await userServices.updateUserStatus(
+    req.user.id,          
+    req.params.userId,
+    req.body.status
+  );
+  return apiResponse.sendSuccess(res, data, 200);
+};
+ 
+
+// const deleteAllUsers = async (req, res) => {
+//   const result = await userServices.deleteAllUsers();
+
+//   apiResponse.sendSuccess(
+//     res,
+//     data: { deletedCount: result.deletedCount },
+//   );
+// };
+
+// const deleteUser = async (req, res) => {
+//   const userId = req.params.userId;
+//   const deletedUser = await userServices.deleteUser(userId);
+
+//   if(!deletedUser){
+//     apiResponse.sendFail(
+//       res,
+//       data: { user: "User not found!" },
+//       404
+//     );
+//   }
+
+//   apiResponse.sendSuccess(
+//     res,
+//     data: { user: deletedUser }
+//   );
+// };
+
+module.exports={getAllUsers,updateUserStatus}

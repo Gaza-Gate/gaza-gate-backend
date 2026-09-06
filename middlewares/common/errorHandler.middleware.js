@@ -1,6 +1,6 @@
-const AppError = require("../../utils/AppError.util.js");
-const apiResponse = require("../../utils/apiResponse.util.js");
-const RESPONSE_STATUS = require("../../constants/responseStatus.constant.js");
+const AppError = require("../../utils/http/AppError.util.js");
+const apiResponse = require("../../utils/http/apiResponse.util.js");
+const RESPONSE_STATUS = require("../../constants/shared/responseStatus.constant.js");
 
 const errorHandler = (err, req, res, next) => {
   if (err instanceof AppError) {

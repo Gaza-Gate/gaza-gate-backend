@@ -1,5 +1,5 @@
 const { body, query, param } = require("express-validator");
-const ORDER_STATUSES = require("../../constants/orderStatuses.constant.js");
+const ORDER_STATUSES = require("../../constants/order/orderStatuses.constant.js");
 
 const createOrderValidator = [
   body("paymentMethod")

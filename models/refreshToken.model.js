@@ -14,6 +14,12 @@ const RefreshToken = sequelize.define(
       allowNull: false,
       field: "user_id",
     },
+    // Per-session active mode for this device/refresh chain (NOT User.activeRoleId).
+    activeRoleId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      field: "active_role_id",
+    },
     tokenHash: {
       type: DataTypes.STRING(64),
       allowNull: false,
@@ -40,6 +46,7 @@ const RefreshToken = sequelize.define(
 
     indexes: [
       { fields: ["user_id"] },
+      { fields: ["active_role_id"] },
       { fields: ["expires_at"] },
       { fields: ["revoked_at"] },
     ],

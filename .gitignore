@@ -1,3 +1,4 @@
 node_modules
 .env
 .cursor/
+services/catalog/GazaGateMvp.code-workspace

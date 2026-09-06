@@ -1,0 +1,264 @@
+const { Op } = require('sequelize');
+const Seller = require('../../models/seller.model');
+const Customer = require('../../models/customer.model');
+const User = require('../../models/user.model');
+const Product = require('../../models/product.model');
+const ProductImage = require('../../models/productImage.model');
+const Review = require('../../models/review.model');
+const Category = require('../../models/category.model');
+const AppError = require('../../utils/http/AppError.util');
+const PAGINATION = require('../../constants/shared/pagination.constant');
+const PRODUCT_STOCK_TYPES = require('../../constants/product/stockType.constant');
+const PRODUCT_STATUS = require('../../constants/product/productStatus.constant');
+const {
+  buildSellerStoreActionUrl,
+  mapSellerSummary,
+  computeIsTrustedSeller,
+} = require('../../utils/navigation/sellerStoreLink.util');
+const { mapCustomerSummary } = require('../../utils/navigation/customerProfileLink.util');
+const { getSellerOrderTrustStats } = require('../../utils/navigation/sellerTrustStats.util');
+const {
+  getCustomersOrderTrustStats,
+} = require('../../utils/navigation/customerTrustStats.util');
+
+const PREVIEW_LIMIT = 4;
+
+const PRODUCT_SORT = Object.freeze({
+  newest: [['created_at', 'DESC']],
+  price_asc: [['price', 'ASC']],
+  price_desc: [['price', 'DESC']],
+  rating: [['average_rating', 'DESC']],
+});
+
+const primaryImageInclude = {
+  model: ProductImage,
+  as: 'images',
+  attributes: ['imageUrl'],
+  where: { isPrimary: true },
+  required: false,
+  separate: true,
+};
+
+const categoryInclude = {
+  model: Category,
+  as: 'category',
+  attributes: ['id', 'name'],
+};
+
+const activeProductWhere = (sellerId) => ({
+  sellerId,
+  status: PRODUCT_STATUS.ACTIVE,
+  isDeleted: false,
+});
+
+const getPrimaryImageUrl = (product) =>
+  product.images?.[0]?.imageUrl ?? null;
+
+const mapStoreProduct = (product) => ({
+  id: product.id,
+  name: product.name,
+  price: product.price,
+  image: getPrimaryImageUrl(product),
+  quantity:
+    product.stockType === PRODUCT_STOCK_TYPES.LIMITED ? product.quantity : null,
+  stockType: product.stockType,
+  category: product.category?.name ?? null,
+});
+
+const mapPreviewProduct = (product) => ({
+  id: product.id,
+  name: product.name,
+  price: product.price,
+  image: getPrimaryImageUrl(product),
+  category: product.category
+    ? { id: product.category.id, name: product.category.name }
+    : null,
+});
+
+const mapReview = (review, orderTrust = null) => {
+  return {
+    id: review.id,
+    rating: review.rating,
+    comment: review.comment,
+    imageUrl: review.imageUrl ?? null,
+    sellerReply: review.sellerReply ?? null,
+    sellerRepliedAt: review.sellerRepliedAt ?? null,
+    createdAt: review.get('createdAt'),
+    customer: mapCustomerSummary(
+      review.customer,
+      review.customer?.user,
+      orderTrust,
+    ),
+  };
+};
+
+const getPublicStore = async (sellerId) => {
+  const seller = await Seller.findOne({
+    where: { id: sellerId },
+    attributes: [
+      'id',
+      'storeName',
+      'storeDescription',
+      'rating',
+      'ratingCount',
+    ],
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['avatar'],
+      },
+    ],
+  });
+
+  if (!seller) throw AppError.fail('Store not found.', 404);
+
+  const reviewsLimit = PAGINATION.DEFAULT_LIMIT;
+  const productWhere = activeProductWhere(seller.id);
+
+  const [
+    activeProductsCount,
+    positiveReviewsCount,
+    previewProducts,
+    { count: reviewsTotal, rows: reviews },
+  ] = await Promise.all([
+    Product.count({ where: productWhere }),
+
+    Review.count({
+      where: { sellerId: seller.id, rating: { [Op.gte]: 4 } },
+    }),
+
+    Product.findAll({
+      where: productWhere,
+      attributes: ['id', 'name', 'price'],
+      include: [primaryImageInclude, categoryInclude],
+      order: [['created_at', 'DESC']],
+      limit: PREVIEW_LIMIT,
+    }),
+
+    Review.findAndCountAll({
+      where: { sellerId: seller.id },
+      attributes: [
+        'id',
+        'rating',
+        'comment',
+        'imageUrl',
+        'sellerReply',
+        'sellerRepliedAt',
+        ['created_at', 'createdAt'],
+      ],
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: ['id'],
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['id', 'firstName', 'lastName', 'avatar'],
+            },
+          ],
+        },
+      ],
+      order: [['created_at', 'DESC']],
+      limit: reviewsLimit,
+      distinct: true,
+    }),
+  ]);
+
+  const [orderTrust, customerTrustById] = await Promise.all([
+    getSellerOrderTrustStats(seller.id),
+    getCustomersOrderTrustStats(
+      reviews.map((review) => review.customer?.id).filter(Boolean),
+    ),
+  ]);
+
+  return {
+    store: {
+      id: seller.id,
+      storeName: seller.storeName,
+      storeDescription: seller.storeDescription,
+      rating: seller.rating,
+      ratingCount: seller.ratingCount,
+      actionUrl: buildSellerStoreActionUrl(seller.id),
+      avatar: seller.user?.avatar ?? null,
+      isTrustedSeller: computeIsTrustedSeller({
+        rating: seller.rating,
+        ratingCount: seller.ratingCount,
+        completedOrders: orderTrust.completedOrders,
+        completionRate: orderTrust.completionRate,
+      }),
+      user: {
+        avatar: seller.user?.avatar ?? null,
+      },
+    },
+    stats: {
+      positiveReviews: positiveReviewsCount,
+      activeProducts: activeProductsCount,
+    },
+    products: {
+      total: activeProductsCount,
+      preview: previewProducts.map(mapPreviewProduct),
+    },
+    reviews: {
+      average:      seller.rating,
+      total:        seller.ratingCount,
+      list:         reviews.map((review) =>
+        mapReview(review, customerTrustById.get(review.customer?.id)),
+      ),
+      hasMore:      reviewsTotal > reviewsLimit
+    },
+  };
+};
+
+const getStoreProducts = async (sellerId, query) => {
+  const seller = await Seller.findOne({
+    where: { id: sellerId },
+    attributes: ['id', 'storeName', 'rating', 'ratingCount'],
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['avatar'],
+      },
+    ],
+  });
+  if (!seller) throw AppError.fail('Store not found.', 404);
+
+  const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
+  const limit = PAGINATION.DEFAULT_LIMIT;
+  const offset = (page - 1) * limit;
+  const order = PRODUCT_SORT[query.sort] ?? PRODUCT_SORT.newest;
+
+  const [{ count, rows }, orderTrust] = await Promise.all([
+    Product.findAndCountAll({
+      where: activeProductWhere(seller.id),
+      attributes: ['id', 'name', 'price', 'quantity', 'stockType'],
+      include: [primaryImageInclude, categoryInclude],
+      order,
+      limit,
+      offset,
+      distinct: true,
+    }),
+    getSellerOrderTrustStats(seller.id),
+  ]);
+
+  const totalPages = Math.ceil(count / limit);
+
+  return {
+    storeName: seller.storeName,
+    store: mapSellerSummary(seller, null, orderTrust),
+    products: rows.map(mapStoreProduct),
+    pagination: {
+      currentPage: page,
+      totalPages,
+      totalItems: count,
+      pageSize: limit,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  };
+};
+
+module.exports = { getPublicStore, getStoreProducts };

@@ -44,10 +44,10 @@ const updateProfileValidation = [
     .withMessage("Store name must be between 2 and 100 characters"),
 
   body("storeDescription")
-    .optional()
+    .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 500 })
-    .withMessage("Store description must not exceed 500 characters"),
+    .isLength({ min: 5, max: 500 })
+    .withMessage("Store description must be between 5 and 500 characters"),
 
   body("neighborhood")
     .optional()

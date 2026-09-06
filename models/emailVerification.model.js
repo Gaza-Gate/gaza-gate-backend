@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db.config.js");
-const { VERIFICATION_TYPES } = require("../constants/auth.constant.js");
+const { VERIFICATION_TYPES } = require("../constants/auth/auth.constant.js");
 
 const EmailVerification = sequelize.define(
   "EmailVerification",
