@@ -10,6 +10,7 @@ const AppError = require('../../utils/http/AppError.util');
 const PAGINATION = require('../../constants/shared/pagination.constant');
 const PRODUCT_STOCK_TYPES = require('../../constants/product/stockType.constant');
 const PRODUCT_STATUS = require('../../constants/product/productStatus.constant');
+const UserStatus = require('../../constants/user/userStatus.constant');
 const {
   buildSellerStoreActionUrl,
   mapSellerSummary,
@@ -107,6 +108,8 @@ const getPublicStore = async (sellerId) => {
         model: User,
         as: 'user',
         attributes: ['avatar'],
+        where: { status: UserStatus.ACTIVE },
+        required: true,
       },
     ],
   });
@@ -125,7 +128,7 @@ const getPublicStore = async (sellerId) => {
     Product.count({ where: productWhere }),
 
     Review.count({
-      where: { sellerId: seller.id, rating: { [Op.gte]: 4 } },
+      where: { sellerId: seller.id, isDeleted: false, rating: { [Op.gte]: 4 } },
     }),
 
     Product.findAll({
@@ -137,7 +140,7 @@ const getPublicStore = async (sellerId) => {
     }),
 
     Review.findAndCountAll({
-      where: { sellerId: seller.id },
+      where: { sellerId: seller.id, isDeleted: false },
       attributes: [
         'id',
         'rating',
@@ -221,6 +224,8 @@ const getStoreProducts = async (sellerId, query) => {
         model: User,
         as: 'user',
         attributes: ['avatar'],
+        where: { status: UserStatus.ACTIVE },
+        required: true,
       },
     ],
   });
@@ -229,7 +234,9 @@ const getStoreProducts = async (sellerId, query) => {
   const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
   const limit = PAGINATION.DEFAULT_LIMIT;
   const offset = (page - 1) * limit;
-  const order = PRODUCT_SORT[query.sort] ?? PRODUCT_SORT.newest;
+  const order = Object.prototype.hasOwnProperty.call(PRODUCT_SORT, query.sort)
+    ? PRODUCT_SORT[query.sort]
+    : PRODUCT_SORT.newest;
 
   const [{ count, rows }, orderTrust] = await Promise.all([
     Product.findAndCountAll({

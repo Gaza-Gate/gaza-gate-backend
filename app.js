@@ -31,6 +31,7 @@ const adminDashboardRoute = require("./routes/admin/dashboard.route.js");
 const sellerStoreRoute = require("./routes/customer/sellerStore.route.js");
 const sharedReviewRoute = require("./routes/shared/review.route.js");
 const landingRoute = require("./routes/shared/landing.route.js");
+const metaRoute = require("./routes/shared/meta.route.js");
 
 const app = express();
 
@@ -68,8 +69,10 @@ app.use("/api/admin/category", adminCategoryRoute);
 app.use("/api/admin/user", adminUserRoute);
 app.use("/api/admin/product", adminProductRoute);
 app.use("/api/admin/dashboard", adminDashboardRoute);
-app.use("/api/customer/store", sellerStoreRoute);
+app.use("/api/store", sellerStoreRoute); // canonical public store path
+app.use("/api/customer/store", sellerStoreRoute); // compatibility alias
 app.use("/api/landing", landingRoute);
+app.use("/api/meta", metaRoute);
 
 app.use((req, res, next) => {
   apiResponse.sendFail(res, { message: "Route not found!" }, 404);

@@ -12,6 +12,10 @@ const ORDER_STATUSES = require("../../constants/order/orderStatuses.constant.js"
 const {
   prepareStoreDescription,
 } = require("../../utils/seller/storeDescription.util.js");
+const {
+  buildSharePayload,
+  buildStoreShareUrl,
+} = require("../../utils/navigation/shareLink.util.js");
 
 const getSellerProfile = async (userId) => {
   const seller = await Seller.findOne({
@@ -210,4 +214,22 @@ const updatePassword = async (userId, data) => {
   await user.save();
 };
 
-module.exports = { getSellerProfile, updateSellerProfile, updatePassword };
+const getStoreShareLink = async (userId) => {
+  const seller = await Seller.findOne({
+    where: { userId },
+    attributes: ["id", "storeName"],
+  });
+  if (!seller) throw AppError.fail("Seller not found.", 404);
+
+  return buildSharePayload(
+    buildStoreShareUrl(seller.id),
+    `Check out ${seller.storeName} on Gaza Gate`,
+  );
+};
+
+module.exports = {
+  getSellerProfile,
+  updateSellerProfile,
+  updatePassword,
+  getStoreShareLink,
+};

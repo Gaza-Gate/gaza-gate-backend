@@ -44,6 +44,15 @@ router.get(
   productController.getSellerProductDetails,
 );
 
+router.get(
+  "/:id/share",
+  authenticateAccessToken,
+  allowedTo(USER_ROLES.SELLER),
+  getProductDetailsPublicValidator,
+  requestsValidator,
+  productController.getProductShareLink,
+);
+
 router.post(
   "/",
   authenticateAccessToken,

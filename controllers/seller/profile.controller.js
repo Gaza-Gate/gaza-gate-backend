@@ -28,4 +28,15 @@ const updatePassword = asyncWrapper(async (req, res) => {
   );
 });
 
-module.exports = { getSellerProfile, updateSellerProfile, updatePassword };
+const getStoreShareLink = asyncWrapper(async (req, res) => {
+  const data = await profileService.getStoreShareLink(req.user.id);
+
+  return apiResponse.sendSuccess(res, data, 200);
+});
+
+module.exports = {
+  getSellerProfile,
+  updateSellerProfile,
+  updatePassword,
+  getStoreShareLink,
+};

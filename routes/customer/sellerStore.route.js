@@ -1,9 +1,22 @@
 const router = require("express").Router();
 const sellerStoreController = require("../../controllers/customer/sellerStore.controller");
-const authenticateAccessToken = require("../../middlewares/auth/verifyToken.middleware");
+const requestsValidator = require("../../middlewares/validators/request.validator.js");
+const {
+  getPublicStoreValidator,
+  getStoreProductsValidator,
+} = require("../../middlewares/validators/sellerStore.validator.js");
 
-router.get("/:sellerId", authenticateAccessToken,sellerStoreController.getPublicStore);
-router.get("/:sellerId/products", authenticateAccessToken,sellerStoreController.getStoreProducts);
+router.get(
+  "/:sellerId",
+  getPublicStoreValidator,
+  requestsValidator,
+  sellerStoreController.getPublicStore,
+);
+router.get(
+  "/:sellerId/products",
+  getStoreProductsValidator,
+  requestsValidator,
+  sellerStoreController.getStoreProducts,
+);
 
 module.exports = router;
-

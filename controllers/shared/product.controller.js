@@ -42,6 +42,11 @@ const getSellerProductDetails = asyncWrapper(async (req, res) => {
   return apiResponse.sendSuccess(res, result, 200);
 });
 
+const getProductShareLink = asyncWrapper(async (req, res) => {
+  const result = await productService.getProductShareLink(req);
+  return apiResponse.sendSuccess(res, result, 200);
+});
+
 module.exports = {
   getSellerProducts,
   getSellerProductDetails,
@@ -51,4 +56,5 @@ module.exports = {
   deleteProduct,
   getAllProductsPublic,
   getProductDetailsPublic,
+  getProductShareLink,
 };
