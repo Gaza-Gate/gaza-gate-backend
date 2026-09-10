@@ -13,9 +13,11 @@ const productController = require("../../controllers/shared/product.controller.j
 const authenticateAccessToken = require("../../middlewares/auth/verifyToken.middleware.js");
 const allowedTo = require("../../middlewares/auth/allowedTo.middleware.js");
 const USER_ROLES = require("../../constants/user/userRoles.constant.js");
+const optionalAuthenticateAccessToken = require("../../middlewares/auth/optionalAuthenticate.middleware.js");
 
 router.get(
   "/public",
+  optionalAuthenticateAccessToken,
   getAllProductsPublicValidator,
   requestsValidator,
   productController.getAllProductsPublic,
@@ -23,10 +25,13 @@ router.get(
 
 router.get(
   "/public/:id",
+  optionalAuthenticateAccessToken,
   getProductDetailsPublicValidator,
   requestsValidator,
   productController.getProductDetailsPublic,
 );
+
+
 
 router.get(
   "/",
@@ -42,15 +47,6 @@ router.get(
   getProductDetailsPublicValidator,
   requestsValidator,
   productController.getSellerProductDetails,
-);
-
-router.get(
-  "/:id/share",
-  authenticateAccessToken,
-  allowedTo(USER_ROLES.SELLER),
-  getProductDetailsPublicValidator,
-  requestsValidator,
-  productController.getProductShareLink,
 );
 
 router.post(

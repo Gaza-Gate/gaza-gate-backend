@@ -3,7 +3,9 @@ const apiResponse = require("../../utils/http/apiResponse.util.js");
 const categoryService = require("../../services/catalog/category.service.js");
 
 const getAllCategories = asyncWrapper(async (req, res) => {
-  const result = await categoryService.getAllCategories(req);
+  const result = req.user
+    ? await categoryService.getAllCategories(req)
+    : await categoryService.getPublicCategories(req);
   return apiResponse.sendSuccess(res, result, 200);
 });
 
@@ -13,7 +15,9 @@ const getAllCategoriesList = asyncWrapper(async (req, res) => {
 });
 
 const getCategory = asyncWrapper(async (req, res) => {
-  const category = await categoryService.getCategory(req.params.id);
+  const category = req.user
+    ? await categoryService.getCategory(req.params.id)
+    : await categoryService.getPublicCategory(req.params.id);
   return apiResponse.sendSuccess(res, { category }, 200);
 });
 

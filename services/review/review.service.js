@@ -1,3 +1,5 @@
+const PRODUCT_STATUS = require("../../constants/product/productStatus.constant.js");
+const UserStatus = require("../../constants/user/userStatus.constant.js");
 const { sequelize } = require("../../config/db.config.js");
 const Review = require("../../models/review.model.js");
 const Seller = require("../../models/seller.model.js");
@@ -88,9 +90,10 @@ const primaryImageInclude = {
   separate: true,
 };
 
-const getRatingDistribution = async (where) => {
+const getRatingDistribution = async (where, include = []) => {
   const rows = await Review.findAll({
     where: { ...where, isDeleted: false },
+    include,
     attributes: [
       "rating",
       [sequelize.fn("COUNT", sequelize.col("rating")), "count"],
@@ -400,11 +403,26 @@ const createReview = async (req) => {
   };
 };
 
-const getSellerRatingStats = async (sellerId) => {
-  return getRatingDistribution({ sellerId });
+const publicProductWhere = { status: PRODUCT_STATUS.ACTIVE, isDeleted: false };
+const activeSellerInclude = {
+  model: Seller, as: "seller", attributes: [], required: true,
+  include: [{
+    model: User, as: "user", attributes: [], required: true,
+    where: { status: UserStatus.ACTIVE },
+  }],
 };
 
-const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
+const summarizeDistribution = (distribution) => {
+  const totalReviews = Object.values(distribution).reduce((sum, count) => sum + count, 0);
+  const totalRating = Object.entries(distribution)
+    .reduce((sum, [rating, count]) => sum + Number(rating) * count, 0);
+  return {
+    totalReviews,
+    averageRating: totalReviews ? Number((totalRating / totalReviews).toFixed(2)) : 0,
+  };
+};
+
+const readSellerProductReviews = async (sellerId, query, visibility) => {
   const seller = await Seller.findOne({
     where: { id: sellerId },
     attributes: ["id", "storeName", "rating", "ratingCount"],
@@ -413,6 +431,7 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
         model: User,
         as: "user",
         attributes: ["avatar"],
+        ...visibility.sellerUser,
       },
     ],
   });
@@ -459,6 +478,7 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
           model: Product,
           as: "product",
           attributes: ["id", "name"],
+          ...visibility.product,
         },
       ],
       order: [["created_at", "DESC"]],
@@ -466,7 +486,9 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
       offset,
       distinct: true,
     }),
-    getSellerRatingStats(seller.id),
+    getRatingDistribution({ sellerId: seller.id }, visibility.product ? [{
+      model: Product, as: "product", attributes: [], ...visibility.product,
+    }] : []),
     getSellerOrderTrustStats(seller.id),
   ]);
 
@@ -474,8 +496,11 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
     rows.map((review) => review.customer?.id).filter(Boolean),
   );
 
+  const ratingSummary = visibility.product
+    ? summarizeDistribution(distribution)
+    : { averageRating: seller.rating, totalReviews: seller.ratingCount };
   const sellerSummary = mapSellerSummary(
-    seller,
+    { ...seller.get({ plain: true }), rating: ratingSummary.averageRating, ratingCount: ratingSummary.totalReviews },
     seller.user,
     sellerOrderTrust,
   );
@@ -502,13 +527,21 @@ const getSellerProductReviewsBySellerId = async (sellerId, query = {}) => {
   });
 
   return {
-    averageRating: seller.rating,
-    totalReviews: seller.ratingCount,
+    ...ratingSummary,
     distribution,
     reviews,
     pagination: buildPagination(count, page, limit),
   };
 };
+
+const getSellerProductReviewsBySellerId = (sellerId, query = {}) =>
+  readSellerProductReviews(sellerId, query, {});
+
+const getPublicSellerProductReviewsBySellerId = (sellerId, query = {}) =>
+  readSellerProductReviews(sellerId, query, {
+    sellerUser: { where: { status: UserStatus.ACTIVE }, required: true },
+    product: { where: publicProductWhere, required: true },
+  });
 
 const getSellerReviews = async (userId, query) => {
   if (!userId)
@@ -524,9 +557,10 @@ const getSellerReviews = async (userId, query) => {
   return getSellerProductReviewsBySellerId(seller.id, query);
 };
 
-const getProductReviews = async (productId, query = {}) => {
+const readProductReviews = async (productId, query, visibility) => {
   const product = await Product.findOne({
-    where: { id: productId, isDeleted: false },
+    where: { id: productId, isDeleted: false, ...visibility.where },
+    include: visibility.include || [],
     attributes: ["id", "averageRating", "reviewsCount"],
   });
   if (!product) {
@@ -628,6 +662,15 @@ const getProductReviews = async (productId, query = {}) => {
     pagination: buildPagination(count, page, limit),
   };
 };
+
+const getProductReviews = (productId, query = {}) =>
+  readProductReviews(productId, query, {});
+
+const getPublicProductReviews = (productId, query = {}) =>
+  readProductReviews(productId, query, {
+    where: publicProductWhere,
+    include: [activeSellerInclude],
+  });
 
 const getMyReviews = async (req) => {
   const { customer } = await resolveCustomerFromRequest(req);
@@ -1018,6 +1061,8 @@ const replyToReview = async (userId, reviewId, reply) => {
 
 
 module.exports = {
+  getPublicProductReviews,
+  getPublicSellerProductReviewsBySellerId,
   createReview,
   getSellerReviews,
   getSellerProductReviewsBySellerId,

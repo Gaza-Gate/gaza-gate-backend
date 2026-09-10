@@ -5,7 +5,10 @@ const apiResponse = require("../../utils/http/apiResponse.util.js");
 const asyncWrapper = require("../../utils/http/asyncWrapper.util.js");
 
 const getProductReviews = asyncWrapper(async (req, res) => {
-  const data = await reviewService.getProductReviews(
+  const readReviews = req.user
+    ? reviewService.getProductReviews
+    : reviewService.getPublicProductReviews;
+  const data = await readReviews(
     req.params.productId,
     req.query,
   );
@@ -29,7 +32,10 @@ const getCustomerProductReviews = asyncWrapper(async (req, res) => {
 });
 
 const getSellerProductReviews = asyncWrapper(async (req, res) => {
-  const data = await reviewService.getSellerProductReviewsBySellerId(
+  const readReviews = req.user
+    ? reviewService.getSellerProductReviewsBySellerId
+    : reviewService.getPublicSellerProductReviewsBySellerId;
+  const data = await readReviews(
     req.params.sellerId,
     req.query,
   );

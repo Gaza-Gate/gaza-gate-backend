@@ -19,10 +19,8 @@ const PAGINATION = require("../../constants/shared/pagination.constant.js");
 const PUBLIC_SORT_OPTIONS = require("../../constants/shared/sort-options.constant.js");
 const USER_ROLES = require("../../constants/user/userRoles.constant.js");
 const UserStatus = require("../../constants/user/userStatus.constant.js");
-const {
-  buildSharePayload,
-  buildProductShareUrl,
-} = require("../../utils/navigation/shareLink.util.js");
+const metaService = require("../shared/meta.service.js");
+const renderMetaDocument = require("../../utils/http/renderMetaDocument.util.js");
 const { mapSellerSummary } = require("../../utils/navigation/sellerStoreLink.util.js");
 const { mapCustomerSummary } = require("../../utils/navigation/customerProfileLink.util.js");
 const {
@@ -51,6 +49,7 @@ const sellerSummaryInclude = {
 const publicSellerSummaryInclude = {
   model: Seller,
   as: "seller",
+  required: true,
   attributes: ["id", "storeName", "rating", "ratingCount"],
   include: [
     {
@@ -513,6 +512,11 @@ const deleteProduct = async (req) => {
   return { message: "Product deleted successfully." };
 };
 
+const getProductMeta = async (req) => {
+  const metadata = await metaService.getProductMeta(req.params.id);
+  return renderMetaDocument(metadata);
+};
+
 const getAllProductsPublic = async (req) => {
   const page = Math.max(Number(req.query.page) || PAGINATION.DEFAULT_PAGE, 1);
   const limit = PAGINATION.DEFAULT_LIMIT;
@@ -791,41 +795,6 @@ const getSellerProductDetails = async (req) => {
   };
 };
 
-const getProductShareLink = async (req) => {
-  const userId = getSellerIdFromRequest(req);
-  if (!userId) {
-    throw AppError.fail("Seller authentication data is missing.", 401);
-  }
-
-  const seller = await Seller.findOne({
-    where: { userId },
-    attributes: ["id"],
-  });
-  if (!seller) throw AppError.fail("Seller not found.", 404);
-
-  const product = await Product.findOne({
-    where: {
-      id: req.params.id,
-      sellerId: seller.id,
-      isDeleted: false,
-    },
-    attributes: ["id", "name", "status"],
-  });
-
-  if (!product) {
-    throw AppError.fail("Product not found.", 404);
-  }
-
-  if (product.status !== PRODUCT_STATUS.ACTIVE) {
-    throw AppError.fail("Only active products can be shared.", 400);
-  }
-
-  return buildSharePayload(
-    buildProductShareUrl(product.id),
-    `Check out ${product.name} on Gaza Gate`,
-  );
-};
-
 module.exports = {
   getSellerProducts,
   getSellerProductDetails,
@@ -835,5 +804,5 @@ module.exports = {
   deleteProduct,
   getAllProductsPublic,
   getProductDetailsPublic,
-  getProductShareLink,
+  getProductMeta,
 };

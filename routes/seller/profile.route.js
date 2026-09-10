@@ -11,12 +11,6 @@ const allowedTo = require("../../middlewares/auth/allowedTo.middleware.js");
 const USER_ROLES = require("../../constants/user/userRoles.constant.js");
 const router = express.Router();
 
-router.get(
-  "/share",
-  authenticateAccessToken,
-  allowedTo(USER_ROLES.SELLER),
-  profileController.getStoreShareLink,
-);
 
 router.get(
   "/",

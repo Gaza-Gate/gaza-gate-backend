@@ -75,32 +75,7 @@ const getProductMeta = async (productId) => {
   };
 };
 
-const getStoreMeta = async (sellerId) => {
-  const seller = await Seller.findOne({
-    where: { id: sellerId },
-    attributes: ["id", "storeName", "storeDescription"],
-    include: [activeSellerUserInclude(["avatar"])],
-  });
-
-  if (!seller) {
-    throw AppError.fail("Store not found.", 404);
-  }
-
-  const description =
-    flattenDescription(seller.storeDescription) ||
-    flattenDescription(`Visit ${seller.storeName} on ${SITE_NAME}.`);
-
-  return {
-    title: seller.storeName,
-    description,
-    image: seller.user?.avatar || fallbackImage(),
-    url: buildStoreShareUrl(seller.id),
-    type: "profile",
-    siteName: SITE_NAME,
-  };
-};
 
 module.exports = {
   getProductMeta,
-  getStoreMeta,
 };

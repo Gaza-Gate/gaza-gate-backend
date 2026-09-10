@@ -1,19 +1,24 @@
-const { Op, literal,fn,col } = require("sequelize");
+const { Op, fn, col } = require("sequelize");
 const Category = require("../../models/category.model");
 const AppError = require("../../utils/http/AppError.util");
 const cloudinaryService = require("../integrations/cloudinary.service");
 const PAGINATION = require("../../constants/shared/pagination.constant");
 const Product = require("../../models/product.model");
+const Seller = require("../../models/seller.model.js");
+const User = require("../../models/user.model.js");
+const PRODUCT_STATUS = require("../../constants/product/productStatus.constant.js");
+const UserStatus = require("../../constants/user/userStatus.constant.js");
 
-const getAllCategories = async (req) => {
+const getCategories = async (req, categoryWhere, productVisibility) => {
   const page = Math.max(Number(req.query.page) || PAGINATION.DEFAULT_PAGE, 1);
   const limit = PAGINATION.DEFAULT_LIMIT;
   const offset = (page - 1) * limit;
   const search = req.query.search?.trim() || "";
 
-  const where = {};
-  if (req.query.active === "true") where.isActive = true;
-  if (req.query.active === "false") where.isActive = false;
+  const where = { ...categoryWhere };
+  if (where.isActive === undefined && ["true", "false"].includes(req.query.active)) {
+    where.isActive = req.query.active === "true";
+  }
   if (search) where.name = { [Op.like]: `%${search}%` };
 
   const { count, rows } = await Category.findAndCountAll({
@@ -29,7 +34,8 @@ const getAllCategories = async (req) => {
         model:   Product,
         as:         'products',
         attributes: [],           // don't select any product columns
-        required:   false,        // LEFT JOIN — categories with 0 products still appear
+        required: false,
+        ...productVisibility,
       },
     ],
     group:    ['Category.id'],    // required when using COUNT with include
@@ -52,6 +58,28 @@ const getAllCategories = async (req) => {
       hasPreviousPage: page > 1,
     },
   };
+};
+
+const getAllCategories = (req) => getCategories(req, {}, {});
+
+const getPublicCategories = (req) => getCategories(req, { isActive: true }, {
+  where: { status: PRODUCT_STATUS.ACTIVE, isDeleted: false },
+  include: [{
+    model: Seller, as: "seller", attributes: [], required: true,
+    include: [{
+      model: User, as: "user", attributes: [], required: true,
+      where: { status: UserStatus.ACTIVE },
+    }],
+  }],
+});
+
+const getPublicCategory = async (id) => {
+  const category = await Category.findOne({
+    where: { id, isActive: true },
+    attributes: ["id", "name", "description", "image", "isActive"],
+  });
+  if (!category) throw AppError.fail("Category not found.", 404);
+  return category;
 };
 
 const getAllCategoriesList = async () => {
@@ -177,6 +205,8 @@ const deleteCategory = async (id) => {
 };
 
 module.exports = {
+  getPublicCategories,
+  getPublicCategory,
   getAllCategories,
   getAllCategoriesList,
   getCategory,

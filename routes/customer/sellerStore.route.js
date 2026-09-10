@@ -5,15 +5,19 @@ const {
   getPublicStoreValidator,
   getStoreProductsValidator,
 } = require("../../middlewares/validators/sellerStore.validator.js");
+const optionalAuthenticateAccessToken = require("../../middlewares/auth/optionalAuthenticate.middleware.js");
+
 
 router.get(
   "/:sellerId",
+  optionalAuthenticateAccessToken,
   getPublicStoreValidator,
   requestsValidator,
   sellerStoreController.getPublicStore,
 );
 router.get(
   "/:sellerId/products",
+  optionalAuthenticateAccessToken,
   getStoreProductsValidator,
   requestsValidator,
   sellerStoreController.getStoreProducts,

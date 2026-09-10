@@ -27,6 +27,7 @@ const deleteProduct = asyncWrapper(async (req, res) => {
   return apiResponse.sendSuccess(res, null, 200);
 });
 
+
 const getAllProductsPublic = asyncWrapper(async (req, res) => {
   const result = await productService.getAllProductsPublic(req);
   return apiResponse.sendSuccess(res, result, 200);
@@ -38,13 +39,14 @@ const getProductDetailsPublic = asyncWrapper(async (req, res) => {
 });
 
 const getSellerProductDetails = asyncWrapper(async (req, res) => {
-  const result = await productService.getSellerProductDetails(req);
-  return apiResponse.sendSuccess(res, result, 200);
-});
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    const result = await productService.getSellerProductDetails(req);
+    return apiResponse.sendSuccess(res, result, 200);
+  }
+  const metaHtml = await productService.getProductMeta(req);
+  return res.type("html").status(200).send(metaHtml);
 
-const getProductShareLink = asyncWrapper(async (req, res) => {
-  const result = await productService.getProductShareLink(req);
-  return apiResponse.sendSuccess(res, result, 200);
+  
 });
 
 module.exports = {
@@ -56,5 +58,4 @@ module.exports = {
   deleteProduct,
   getAllProductsPublic,
   getProductDetailsPublic,
-  getProductShareLink,
 };

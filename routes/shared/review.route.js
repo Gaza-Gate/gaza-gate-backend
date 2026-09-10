@@ -1,6 +1,7 @@
-const router = require("express").Router();
+﻿const router = require("express").Router();
 const reviewController = require("../../controllers/shared/review.controller.js");
 const authenticateAccessToken = require("../../middlewares/auth/verifyToken.middleware.js");
+const optionalAuthenticateAccessToken = require("../../middlewares/auth/optionalAuthenticate.middleware.js");
 const requestsValidator = require("../../middlewares/validators/request.validator.js");
 const {
   getProductReviewsValidator,
@@ -16,7 +17,7 @@ const {
 
 router.get(
   "/product/:productId",
-  authenticateAccessToken,
+  optionalAuthenticateAccessToken,
   getProductReviewsValidator,
   requestsValidator,
   reviewController.getProductReviews,
@@ -40,7 +41,7 @@ router.get(
 
 router.get(
   "/seller/:sellerId/product-reviews",
-  authenticateAccessToken,
+  optionalAuthenticateAccessToken,
   getSellerProductReviewsValidator,
   requestsValidator,
   reviewController.getSellerProductReviews,
