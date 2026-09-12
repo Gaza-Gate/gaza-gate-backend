@@ -16,6 +16,7 @@ const Cart = require("./cart.model.js");
 const CartItem = require("./cartItem.model.js");
 const Order = require("./order.model.js");
 const OrderItem = require("./orderItem.model.js");
+const ContactDirectory = require("./contactDirectory.model.js");
 const Notification = require("./notification.model.js");
 const UserNotification = require("./userNotification.model.js");
 const Review = require("./review.model.js");
@@ -532,6 +533,7 @@ module.exports = {
   CartItem,
   Order,
   OrderItem,
+  ContactDirectory,
   Notification,
   UserNotification,
   Review,

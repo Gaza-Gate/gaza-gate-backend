@@ -28,6 +28,8 @@ const adminCategoryRoute = require("./routes/admin/category.route.js");
 const adminUserRoute = require("./routes/admin/user.route.js");
 const adminProductRoute = require("./routes/admin/product.route.js");
 const adminDashboardRoute = require("./routes/admin/dashboard.route.js");
+const adminContactDirectoryRoute = require("./routes/admin/contactDirectory.route.js");
+const customerContactDirectoryRoute = require("./routes/customer/contactDirectory.route.js");
 const sellerStoreRoute = require("./routes/customer/sellerStore.route.js");
 const sharedReviewRoute = require("./routes/shared/review.route.js");
 const landingRoute = require("./routes/shared/landing.route.js");
@@ -68,6 +70,8 @@ app.use("/api/admin/category", adminCategoryRoute);
 app.use("/api/admin/user", adminUserRoute);
 app.use("/api/admin/product", adminProductRoute);
 app.use("/api/admin/dashboard", adminDashboardRoute);
+app.use("/api/admin/contact-directory", adminContactDirectoryRoute);
+app.use("/api/customer/contact-directory", customerContactDirectoryRoute);
 app.use("/api/store", sellerStoreRoute); // canonical public store path
 app.use("/api/customer/store", sellerStoreRoute); // compatibility alias
 app.use("/api/landing", landingRoute);

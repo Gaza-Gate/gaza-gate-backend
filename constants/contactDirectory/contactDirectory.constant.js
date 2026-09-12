@@ -1,0 +1,13 @@
+const CONTACT_PHONE_PATTERN = /^(\+970|0)(5[0-9]{8})$/;
+
+const CONTACT_DIRECTORY_LIMITS = Object.freeze({
+  DELIVERY_NAME_MAX: 100,
+  PHONE_MAX: 20,
+});
+
+
+
+module.exports = {
+  CONTACT_PHONE_PATTERN,
+  CONTACT_DIRECTORY_LIMITS,
+};
