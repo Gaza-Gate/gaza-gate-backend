@@ -68,6 +68,7 @@ const getSellerProfile = async (userId) => {
     : null;
 
   return {
+    sellerId:seller.id,
     storeName: seller.storeName,
     storeDescription: seller.storeDescription,
     rating: seller.rating,
@@ -211,9 +212,4 @@ const updatePassword = async (userId, data) => {
   await user.save();
 };
 
-
-module.exports = {
-  getSellerProfile,
-  updateSellerProfile,
-  updatePassword,
-};
+module.exports = { getSellerProfile, updateSellerProfile, updatePassword };
