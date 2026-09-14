@@ -68,6 +68,7 @@ const getSellerProfile = async (userId) => {
     : null;
 
   return {
+    sellerId:seller.id,
     storeName: seller.storeName,
     storeDescription: seller.storeDescription,
     rating: seller.rating,

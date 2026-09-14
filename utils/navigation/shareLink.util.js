@@ -1,31 +1,10 @@
 const AppError = require("../http/AppError.util.js");
 const { buildSellerStoreActionUrl } = require("./sellerStoreLink.util.js");
 
-const getFrontendBaseUrl = () => {
-  const raw = process.env.FRONTEND_BASE_URL?.trim();
-  let parsed;
-
-  try {
-    parsed = raw ? new URL(raw) : null;
-  } catch {
-    parsed = null;
-  }
-
-  if (
-    !parsed ||
-    (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-  ) {
-    throw AppError.error(
-      "FRONTEND_BASE_URL is missing or invalid. It must be an absolute http(s) URL.",
-    );
-  }
-
-  return parsed;
-};
 
 const joinFrontendUrl = (path) => {
-  const base = getFrontendBaseUrl();
-  let prefix = `${base.origin}${base.pathname}`;
+  const base =process.env.FRONTEND_BASE_URL
+  let prefix = `${base}`;
   if (prefix.endsWith("/")) {
     prefix = prefix.slice(0, -1);
   }
@@ -43,6 +22,7 @@ const buildProductShareUrl = (productId) => {
   if (!path) {
     throw AppError.error("Cannot build a product share URL without a product id.");
   }
+  
   return joinFrontendUrl(path);
 };
 

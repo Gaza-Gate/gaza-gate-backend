@@ -39,7 +39,7 @@ const getProductDetailsPublic = asyncWrapper(async (req, res) => {
 });
 
 const getSellerProductDetails = asyncWrapper(async (req, res) => {
-  if (req.get('content-type') && req.get('content-type').includes('application/json')) {
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
     const result = await productService.getSellerProductDetails(req);
     return apiResponse.sendSuccess(res, result, 200);
   }
