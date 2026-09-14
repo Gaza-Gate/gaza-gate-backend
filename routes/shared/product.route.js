@@ -42,8 +42,7 @@ router.get(
 
 router.get(
   "/:id",
-  authenticateAccessToken,
-  allowedTo(USER_ROLES.SELLER),
+  optionalAuthenticateAccessToken,
   getProductDetailsPublicValidator,
   requestsValidator,
   productController.getSellerProductDetails,
