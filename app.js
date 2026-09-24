@@ -33,6 +33,8 @@ const customerContactDirectoryRoute = require("./routes/customer/contactDirector
 const sellerStoreRoute = require("./routes/customer/sellerStore.route.js");
 const sharedReviewRoute = require("./routes/shared/review.route.js");
 const landingRoute = require("./routes/shared/landing.route.js");
+const sharedMapRoute = require("./routes/shared/map.route.js");
+const sellerMapRoute = require("./routes/seller/map.route.js");
 
 const app = express();
 
@@ -75,6 +77,9 @@ app.use("/api/customer/contact-directory", customerContactDirectoryRoute);
 app.use("/api/store", sellerStoreRoute); // canonical public store path
 app.use("/api/customer/store", sellerStoreRoute); // compatibility alias
 app.use("/api/landing", landingRoute);
+app.use("/api/map", sharedMapRoute);
+app.use("/api/seller/map", sellerMapRoute);
+
 app.use((req, res, next) => {
   apiResponse.sendFail(res, { message: "Route not found!" }, 404);
 });

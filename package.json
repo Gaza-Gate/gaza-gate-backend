@@ -12,7 +12,8 @@
     "test:trusted-seller": "jest tests/unit/sellerStoreLink.util.test.js tests/integration/trustedSeller.e2e.test.js --runInBand --forceExit",
     "test:trusted-buyer": "jest tests/unit/customerProfileLink.util.test.js tests/integration/trustedBuyer.e2e.test.js --runInBand --forceExit",
     "test:api-integration": "jest --testMatch \"**/tests/integration/*.integration.js\" --runInBand",
-    "test:contact-directory": "jest tests/unit/contactDirectory.phone.test.js tests/integration/contactDirectory.integration.js --runInBand --forceExit"
+    "test:contact-directory": "jest tests/unit/contactDirectory.phone.test.js tests/integration/contactDirectory.integration.js --runInBand --forceExit",
+    "test:map": "jest tests/unit/geo.util.test.js tests/unit/map.validators.test.js tests/unit/mapStores.service.test.js tests/api/map.api.test.js --runInBand --forceExit"
   },
   "keywords": [],
   "author": "",

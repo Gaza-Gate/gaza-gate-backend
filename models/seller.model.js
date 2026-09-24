@@ -49,6 +49,19 @@ const Seller = sequelize.define(
       field: "rating_count",
       validate: { min: 0 },
     },
+    latitude: {
+      type: DataTypes.DECIMAL(10, 7),
+      allowNull: true,
+    },
+    longitude: {
+      type: DataTypes.DECIMAL(10, 7),
+      allowNull: true,
+    },
+    locatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "located_at",
+    },
   },
   {
     tableName: "seller",
@@ -56,6 +69,7 @@ const Seller = sequelize.define(
     createdAt: "created_at",
     updatedAt: "updated_at",
     underscored: true,
+    indexes: [{ fields: ["latitude", "longitude"] }],
   },
 );
 
