@@ -1,6 +1,9 @@
 require("dotenv").config();
 require("./models/associations");
 const express = require("express");
+const fs = require('fs');
+const path = require('path');
+const morgan = require('morgan');
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const authRoute = require("./routes/auth.route.js");
@@ -33,6 +36,14 @@ app.use(
     credentials: true,
   }),
 );
+
+const accessLogStream = fs.createWriteStream(
+  path.join(__dirname, 'access.log'), 
+  { flags: 'a' }
+);
+
+
+app.use(morgan('combined', { stream: accessLogStream }));
 
 app.use(express.json());
 app.use(cookieParser());
