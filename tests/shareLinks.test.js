@@ -12,7 +12,7 @@ beforeEach(() => {
 test("share links preserve frontend prefixes and encode social targets", () => {
   const url = buildProductShareUrl("product-id");
   expect(url).toBe("https://front.example/app/product/product-id");
-  expect(buildStoreShareUrl("seller-id")).toBe("https://front.example/app/store/seller-id");
+  expect(buildStoreShareUrl("seller-id")).toBe("https://front.example/app/customer/store/seller-id");
   const payload = buildSharePayload(url, "Fish & chips");
   expect(new URL(payload.targets.whatsapp).searchParams.get("text")).toBe(`Fish & chips ${url}`);
   expect(new URL(payload.targets.facebook).searchParams.get("u")).toBe(url);

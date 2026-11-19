@@ -3,9 +3,11 @@ const TRUSTED_MIN_RATING_COUNT = 10;
 const TRUSTED_MIN_COMPLETED_ORDERS = 10;
 const TRUSTED_MIN_COMPLETION_RATE = 90;
 
+// Public storefront route on the frontend (same path the store QR code encodes).
+// Old "/store/:sellerId" links are still redirected here by the frontend.
 const buildSellerStoreActionUrl = (sellerId) => {
   if (!sellerId) return null;
-  return `/store/${sellerId}`;
+  return `/customer/store/${sellerId}`;
 };
 
 const computeIsTrustedSeller = ({
