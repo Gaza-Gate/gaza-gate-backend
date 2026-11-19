@@ -1,7 +1,7 @@
 const { User } = require("../../models/associations.js");
-const token = require("../../utils/token.util.js");
-const AppError = require("../../utils/AppError.util.js");
-const UserStatus = require("../../constants/userStatus.constant.js");
+const token = require("../../utils/security/token.util.js");
+const AppError = require("../../utils/http/AppError.util.js");
+const UserStatus = require("../../constants/user/userStatus.constant.js");
 
 const authenticateAccessToken = async (req, res, next) => {
   try {
@@ -26,6 +26,13 @@ const authenticateAccessToken = async (req, res, next) => {
 
     if (user.status === UserStatus.BANNED) {
       throw AppError.fail("Your account has been banned.", 403);
+    }
+
+    const tokenVersionFromPayload = payload.tokenVersion ?? 0;
+    const currentTokenVersion = user.tokenVersion ?? 0;
+
+    if (tokenVersionFromPayload !== currentTokenVersion) {
+      throw AppError.fail("Invalid or expired access token", 401);
     }
 
     req.user = {

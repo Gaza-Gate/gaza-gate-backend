@@ -3,6 +3,7 @@ const Role = require("./role.model");
 const Address = require("./address.model");
 const Customer = require("./customer.model");
 const Seller = require("./seller.model");
+const Admin = require("./admin.model");
 const RefreshToken = require("./refreshToken.model");
 const PasswordResetSession = require("./passwordResetSession.model.js");
 const UserAuthProvider = require("./UserAuthProvider.model.js");
@@ -15,9 +16,11 @@ const Cart = require("./cart.model.js");
 const CartItem = require("./cartItem.model.js");
 const Order = require("./order.model.js");
 const OrderItem = require("./orderItem.model.js");
+const ContactDirectory = require("./contactDirectory.model.js");
 const Notification = require("./notification.model.js");
 const UserNotification = require("./userNotification.model.js");
 const Review = require("./review.model.js");
+const SellerCustomerReview = require("./sellerCustomerReview.model.js");
 const Conversation = require("./conversation.model.js");
 const Message = require("./message.model.js");
 const ChatbotRecord = require("./chatbotRecord.model.js");
@@ -25,13 +28,13 @@ const ChatbotRecord = require("./chatbotRecord.model.js");
 // ==================== AUTH ====================
 
 Role.hasMany(User, {
-  foreignKey: { name: "roleId", field: "role_id" },
+  foreignKey: { name: "activeRoleId", field: "active_role_id" },
   as: "users",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 User.belongsTo(Role, {
-  foreignKey: { name: "roleId", field: "role_id" },
+  foreignKey: { name: "activeRoleId", field: "active_role_id" },
   as: "role",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
@@ -70,6 +73,17 @@ Seller.belongsTo(User, {
   onDelete: "CASCADE",
 });
 
+User.hasOne(Admin, {
+  foreignKey: { name: "userId", field: "user_id" },
+  as: "admin",
+  onDelete: "CASCADE",
+});
+Admin.belongsTo(User, {
+  foreignKey: { name: "userId", field: "user_id" },
+  as: "user",
+  onDelete: "CASCADE",
+});
+
 User.hasMany(RefreshToken, {
   foreignKey: { name: "userId", field: "user_id" },
   as: "refreshTokens",
@@ -79,6 +93,19 @@ RefreshToken.belongsTo(User, {
   foreignKey: { name: "userId", field: "user_id" },
   as: "user",
   onDelete: "CASCADE",
+});
+
+Role.hasMany(RefreshToken, {
+  foreignKey: { name: "activeRoleId", field: "active_role_id" },
+  as: "refreshTokens",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+RefreshToken.belongsTo(Role, {
+  foreignKey: { name: "activeRoleId", field: "active_role_id" },
+  as: "activeRole",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 
 User.hasMany(UserAuthProvider, {
@@ -315,12 +342,13 @@ Review.belongsTo(Product, {
 Order.hasMany(Review, {
   foreignKey: { name: "orderId", field: "order_id" },
   as: "reviews",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 Review.belongsTo(Order, {
   foreignKey: { name: "orderId", field: "order_id" },
   as: "order",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
@@ -332,6 +360,42 @@ Review.belongsTo(Seller, {
   foreignKey: { name: "sellerId", field: "seller_id" },
   as: "seller",
   onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+// ==================== SELLER → CUSTOMER REVIEWS ====================
+
+Seller.hasMany(SellerCustomerReview, {
+  foreignKey: { name: "sellerId", field: "seller_id" },
+  as: "customerReviews",
+});
+SellerCustomerReview.belongsTo(Seller, {
+  foreignKey: { name: "sellerId", field: "seller_id" },
+  as: "seller",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+
+Customer.hasMany(SellerCustomerReview, {
+  foreignKey: { name: "customerId", field: "customer_id" },
+  as: "sellerReviews",
+});
+SellerCustomerReview.belongsTo(Customer, {
+  foreignKey: { name: "customerId", field: "customer_id" },
+  as: "customer",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
+
+Order.hasMany(SellerCustomerReview, {
+  foreignKey: { name: "orderId", field: "order_id" },
+  as: "sellerCustomerReviews",
+  onDelete: "RESTRICT",
+});
+SellerCustomerReview.belongsTo(Order, {
+  foreignKey: { name: "orderId", field: "order_id" },
+  as: "order",
+  onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
 
@@ -456,6 +520,7 @@ module.exports = {
   Address,
   Customer,
   Seller,
+  Admin,
   RefreshToken,
   UserAuthProvider,
   PasswordResetSession,
@@ -468,9 +533,11 @@ module.exports = {
   CartItem,
   Order,
   OrderItem,
+  ContactDirectory,
   Notification,
   UserNotification,
   Review,
+  SellerCustomerReview,
   Conversation,
   Message,
   ChatbotRecord,

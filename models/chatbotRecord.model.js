@@ -3,8 +3,10 @@ const { sequelize } = require("../config/db.config.js");
 const {
   CHATBOT_RECORD_TYPES,
   UNANSWERED_QUESTION_STATUS,
-} = require("../constants/chatbot.constant.js");
-const { SELLER_CHAT_MESSAGE_ROLES } = require("../constants/sellerChatbot.constant.js");
+} = require("../constants/chatbot/chatbot.constant.js");
+const {
+  SELLER_CHAT_MESSAGE_ROLES,
+} = require("../constants/chatbot/sellerChatbot.constant.js");
 
 const ChatbotRecord = sequelize.define(
   "ChatbotRecord",
