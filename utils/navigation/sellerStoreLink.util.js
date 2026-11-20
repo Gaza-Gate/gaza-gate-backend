@@ -3,11 +3,19 @@ const TRUSTED_MIN_RATING_COUNT = 10;
 const TRUSTED_MIN_COMPLETED_ORDERS = 10;
 const TRUSTED_MIN_COMPLETION_RATE = 90;
 
-// Public storefront route on the frontend (same path the store QR code encodes).
-// Old "/store/:sellerId" links are still redirected here by the frontend.
-const buildSellerStoreActionUrl = (sellerId) => {
-  if (!sellerId) return null;
-  return `/customer/store/${sellerId}`;
+// Public storefront route on the frontend.
+//   - store has a slug  → "/store/<slug>"         (gazagate.store/store/gift-store)
+//   - no slug yet       → "/customer/store/<id>"  (stores created before slugs)
+// Both id links ("/store/<id>", "/customer/store/<id>") keep working forever:
+// printed QR codes use them.
+//
+// Accepts a seller object ({ id, slug }) or (sellerId, slug).
+const buildSellerStoreActionUrl = (sellerOrId, slug = null) => {
+  const id = typeof sellerOrId === "object" ? sellerOrId?.id : sellerOrId;
+  const storeSlug = typeof sellerOrId === "object" ? sellerOrId?.slug : slug;
+  if (storeSlug) return `/store/${storeSlug}`;
+  if (!id) return null;
+  return `/customer/store/${id}`;
 };
 
 const computeIsTrustedSeller = ({
@@ -42,7 +50,8 @@ const mapSellerSummary = (seller, user = null, orderTrust = null) => {
     id: seller.id,
     storeName: seller.storeName,
     avatar: avatarUser?.avatar ?? null,
-    actionUrl: buildSellerStoreActionUrl(seller.id),
+    slug: seller.slug ?? null,
+    actionUrl: buildSellerStoreActionUrl(seller),
     isTrustedSeller: computeIsTrustedSeller({
       rating: seller.rating,
       ratingCount: seller.ratingCount,

@@ -26,8 +26,9 @@ const buildProductShareUrl = (productId) => {
   return joinFrontendUrl(path);
 };
 
-const buildStoreShareUrl = (sellerId) => {
-  const path = buildSellerStoreActionUrl(sellerId);
+// sellerOrId: seller object ({ id, slug }) → /store/<slug>, or an id → /customer/store/<id>
+const buildStoreShareUrl = (sellerOrId) => {
+  const path = buildSellerStoreActionUrl(sellerOrId);
   if (!path) {
     throw AppError.error("Cannot build a store share URL without a seller id.");
   }

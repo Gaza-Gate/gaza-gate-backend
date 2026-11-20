@@ -22,7 +22,7 @@ const {
 const getDashboard = async (userId) => {
   const seller = await Seller.findOne({
     where: { userId: userId },
-    attributes: ["id", "storeName", "rating", "ratingCount"],
+    attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
     include: [
       {
         model: User,

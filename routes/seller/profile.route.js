@@ -3,6 +3,8 @@ const authenticateAccessToken = require("../../middlewares/auth/verifyToken.midd
 const {
   updateProfileValidation,
   updatePasswordValidation,
+  storeSlugAvailabilityValidation,
+  updateStoreSlugValidation,
 } = require("../../middlewares/validators/profile.validator.js");
 const requestsValidator = require("../../middlewares/validators/request.validator.js");
 const profileController = require("../../controllers/seller/profile.controller.js");
@@ -36,6 +38,25 @@ router.put(
   updatePasswordValidation,
   requestsValidator,
   profileController.updatePassword,
+);
+
+// Store link: gazagate.store/store/<slug>
+router.get(
+  "/slug/availability",
+  authenticateAccessToken,
+  allowedTo(USER_ROLES.SELLER),
+  storeSlugAvailabilityValidation,
+  requestsValidator,
+  profileController.checkStoreSlugAvailability,
+);
+
+router.put(
+  "/slug",
+  authenticateAccessToken,
+  allowedTo(USER_ROLES.SELLER),
+  updateStoreSlugValidation,
+  requestsValidator,
+  profileController.updateStoreSlug,
 );
 
 module.exports = router;

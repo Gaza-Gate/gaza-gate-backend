@@ -42,7 +42,7 @@ const reviewProductInclude = {
 const reviewSellerInclude = {
   model: Seller,
   as: "seller",
-  attributes: ["id", "storeName", "rating", "ratingCount"],
+  attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
   include: [
     {
       model: User,
@@ -224,7 +224,7 @@ const getSellerReviewsPreview = async (customerId) => {
       {
         model: Seller,
         as: "seller",
-        attributes: ["id", "storeName", "rating", "ratingCount"],
+        attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
         include: [
           {
             model: User,

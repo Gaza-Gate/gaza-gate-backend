@@ -31,6 +31,7 @@ const adminDashboardRoute = require("./routes/admin/dashboard.route.js");
 const adminContactDirectoryRoute = require("./routes/admin/contactDirectory.route.js");
 const customerContactDirectoryRoute = require("./routes/customer/contactDirectory.route.js");
 const sellerStoreRoute = require("./routes/customer/sellerStore.route.js");
+const storePageRoute = require("./routes/shared/storePage.route.js");
 const sharedReviewRoute = require("./routes/shared/review.route.js");
 const landingRoute = require("./routes/shared/landing.route.js");
 const sharedMapRoute = require("./routes/shared/map.route.js");
@@ -74,6 +75,9 @@ app.use("/api/admin/product", adminProductRoute);
 app.use("/api/admin/dashboard", adminDashboardRoute);
 app.use("/api/admin/contact-directory", adminContactDirectoryRoute);
 app.use("/api/customer/contact-directory", customerContactDirectoryRoute);
+// Store page on the site domain (gazagate.store/store/<slug>): frontend app +
+// link-preview tags for WhatsApp/Facebook. The hosting proxy routes /store/* here.
+app.use("/store", storePageRoute);
 app.use("/api/store", sellerStoreRoute); // canonical public store path
 app.use("/api/customer/store", sellerStoreRoute); // compatibility alias
 app.use("/api/landing", landingRoute);

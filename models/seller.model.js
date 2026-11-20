@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db.config.js");
+const { STORE_SLUG_LIMITS } = require("../constants/seller/storeSlug.constant.js");
 
 const Seller = sequelize.define(
   "Seller",
@@ -20,6 +21,19 @@ const Seller = sequelize.define(
       allowNull: false,
       field: "store_name",
       validate: { notEmpty: true, len: [2, 100] },
+    },
+    // Public store URL: /store/<slug>. Generated from storeName on create
+    // (see beforeCreate hook) and editable by the seller. NULL only for rows
+    // created before the slug columns existed — links fall back to the id.
+    slug: {
+      type: DataTypes.STRING(STORE_SLUG_LIMITS.MAX),
+      allowNull: true,
+      unique: true,
+    },
+    slugChangedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "slug_changed_at",
     },
     storeDescription: {
       type: DataTypes.TEXT,
@@ -72,5 +86,16 @@ const Seller = sequelize.define(
     indexes: [{ fields: ["latitude", "longitude"] }],
   },
 );
+
+// Every new store gets a unique slug from its name (all create paths:
+// local register, Google register, become-seller).
+Seller.beforeCreate(async (seller, options) => {
+  if (seller.slug) return;
+  // required lazily: the service depends on this model
+  const { generateUniqueStoreSlug } = require("../services/profile/storeSlug.service.js");
+  seller.slug = await generateUniqueStoreSlug(seller.storeName, {
+    transaction: options.transaction,
+  });
+});
 
 module.exports = Seller;

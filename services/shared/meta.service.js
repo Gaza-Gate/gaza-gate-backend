@@ -5,6 +5,7 @@ const User = require("../../models/user.model.js");
 const AppError = require("../../utils/http/AppError.util.js");
 const PRODUCT_STATUS = require("../../constants/product/productStatus.constant.js");
 const UserStatus = require("../../constants/user/userStatus.constant.js");
+const { findSellerByStoreKey } = require("../profile/storeSlug.service.js");
 const {
   buildProductShareUrl,
   buildStoreShareUrl,
@@ -76,6 +77,56 @@ const getProductMeta = async (productId) => {
 };
 
 
+const formatProductsCount = (count) => {
+  if (count === 1) return "منتج واحد";
+  if (count === 2) return "منتجان";
+  if (count >= 3 && count <= 10) return `${count} منتجات`;
+  return `${count} منتج`;
+};
+
+/**
+ * Link-preview card for a store (WhatsApp / Facebook / Telegram):
+ *   title: "gift store | Gaza Gate"
+ *   description: store description (≤160) + "⭐ 5.0 · 3 منتجات"
+ *   image: store avatar, else the site logo
+ * Returns null when the store does not exist or is not active
+ * (the page then gets the generic site card).
+ *
+ * @param {string} storeKey - id, current slug or old slug from /store/<storeKey>
+ */
+const getStoreMeta = async (storeKey) => {
+  const found = await findSellerByStoreKey(storeKey, {
+    attributes: ["id", "slug", "storeName", "storeDescription", "rating", "ratingCount"],
+    include: [activeSellerUserInclude(["avatar"])],
+  });
+  if (!found) return null;
+  const { seller } = found;
+
+  const productsCount = await Product.count({
+    where: { sellerId: seller.id, status: PRODUCT_STATUS.ACTIVE, isDeleted: false },
+  });
+
+  const stats = [
+    Number(seller.ratingCount) > 0 ? `⭐ ${Number(seller.rating).toFixed(1)}` : null,
+    productsCount > 0 ? formatProductsCount(productsCount) : null,
+  ].filter(Boolean).join(" · ");
+
+  const about =
+    flattenDescription(seller.storeDescription) ||
+    `تسوّق من متجر ${seller.storeName} على ${SITE_NAME}`;
+  const description = flattenDescription(stats ? `${about} · ${stats}` : about);
+
+  return {
+    title: `${seller.storeName} | ${SITE_NAME}`,
+    description,
+    image: seller.user?.avatar || fallbackImage(),
+    url: buildStoreShareUrl(seller),
+    type: "website",
+    siteName: SITE_NAME,
+  };
+};
+
 module.exports = {
   getProductMeta,
+  getStoreMeta,
 };

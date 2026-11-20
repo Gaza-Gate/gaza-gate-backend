@@ -12,6 +12,7 @@ const ORDER_STATUSES = require("../../constants/order/orderStatuses.constant.js"
 const {
   prepareStoreDescription,
 } = require("../../utils/seller/storeDescription.util.js");
+const storeSlugService = require("./storeSlug.service.js");
 
 
 const getSellerProfile = async (userId) => {
@@ -19,6 +20,8 @@ const getSellerProfile = async (userId) => {
     where: { userId: userId },
     attributes: [
       "id",
+      "slug",
+      "slugChangedAt",
       "storeName",
       "storeDescription",
       "rating",
@@ -69,6 +72,10 @@ const getSellerProfile = async (userId) => {
 
   return {
     sellerId:seller.id,
+    // store link: gazagate.store/store/<slug> (null until backfilled)
+    slug: seller.slug ?? null,
+    slugChangedAt: seller.slugChangedAt ?? null,
+    nextSlugChangeAt: storeSlugService.nextSlugChangeAt(seller.slugChangedAt),
     storeName: seller.storeName,
     storeDescription: seller.storeDescription,
     rating: seller.rating,
@@ -212,4 +219,29 @@ const updatePassword = async (userId, data) => {
   await user.save();
 };
 
-module.exports = { getSellerProfile, updateSellerProfile, updatePassword };
+const findSellerIdByUserId = async (userId) => {
+  const seller = await Seller.findOne({ where: { userId }, attributes: ["id"] });
+  if (!seller) throw AppError.fail("No account found.", 404);
+  return seller.id;
+};
+
+// Live check while the seller types a new store link.
+const checkStoreSlugAvailability = async (userId, slug) =>
+  storeSlugService.checkStoreSlugAvailability(await findSellerIdByUserId(userId), slug);
+
+// Change the store link (old one keeps redirecting; once per 30 days).
+const updateStoreSlug = async (userId, slug) => {
+  const result = await storeSlugService.changeStoreSlug(await findSellerIdByUserId(userId), slug);
+  return {
+    ...result,
+    nextSlugChangeAt: storeSlugService.nextSlugChangeAt(result.slugChangedAt),
+  };
+};
+
+module.exports = {
+  getSellerProfile,
+  updateSellerProfile,
+  updatePassword,
+  checkStoreSlugAvailability,
+  updateStoreSlug,
+};
