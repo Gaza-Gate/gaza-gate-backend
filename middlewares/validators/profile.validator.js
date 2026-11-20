@@ -1,4 +1,5 @@
-const { body } = require("express-validator");
+const { body, query } = require("express-validator");
+const { STORE_SLUG_LIMITS } = require("../../constants/seller/storeSlug.constant.js");
 const updateProfileValidation = [
   body("email").not().exists().withMessage("Email cannot be updated"),
 
@@ -111,4 +112,28 @@ const updatePasswordValidation = [
   }),
 ];
 
-module.exports = { updateProfileValidation, updatePasswordValidation };
+// Store link (slug). Format rules are enforced again in storeSlug.service.
+const storeSlugAvailabilityValidation = [
+  query("slug")
+    .trim()
+    .notEmpty()
+    .withMessage("Store link is required")
+    .isLength({ max: 100 })
+    .withMessage("Store link is too long"),
+];
+
+const updateStoreSlugValidation = [
+  body("slug")
+    .trim()
+    .notEmpty()
+    .withMessage("Store link is required")
+    .isLength({ min: STORE_SLUG_LIMITS.MIN, max: STORE_SLUG_LIMITS.MAX })
+    .withMessage(`Store link must be between ${STORE_SLUG_LIMITS.MIN} and ${STORE_SLUG_LIMITS.MAX} characters`),
+];
+
+module.exports = {
+  updateProfileValidation,
+  updatePasswordValidation,
+  storeSlugAvailabilityValidation,
+  updateStoreSlugValidation,
+};

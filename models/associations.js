@@ -24,6 +24,7 @@ const SellerCustomerReview = require("./sellerCustomerReview.model.js");
 const Conversation = require("./conversation.model.js");
 const Message = require("./message.model.js");
 const ChatbotRecord = require("./chatbotRecord.model.js");
+const SellerSlugHistory = require("./sellerSlugHistory.model.js");
 
 // ==================== AUTH ====================
 
@@ -70,6 +71,18 @@ User.hasOne(Seller, {
 Seller.belongsTo(User, {
   foreignKey: { name: "userId", field: "user_id" },
   as: "user",
+  onDelete: "CASCADE",
+});
+
+// Old store slugs that keep redirecting to the store (/store/<old-slug>)
+Seller.hasMany(SellerSlugHistory, {
+  foreignKey: { name: "sellerId", field: "seller_id" },
+  as: "slugHistory",
+  onDelete: "CASCADE",
+});
+SellerSlugHistory.belongsTo(Seller, {
+  foreignKey: { name: "sellerId", field: "seller_id" },
+  as: "seller",
   onDelete: "CASCADE",
 });
 
@@ -541,4 +554,5 @@ module.exports = {
   Conversation,
   Message,
   ChatbotRecord,
+  SellerSlugHistory,
 };

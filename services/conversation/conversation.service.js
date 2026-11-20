@@ -376,7 +376,7 @@ const listConversations = async (userId, role, query = {}) => {
     sellerUserIds.length
       ? Seller.findAll({
           where: { userId: sellerUserIds },
-          attributes: ["id", "userId", "storeName", "rating", "ratingCount"],
+          attributes: ["id", "slug", "userId", "storeName", "rating", "ratingCount"],
         })
       : Promise.resolve([]),
     customerUserIds.length
@@ -502,7 +502,7 @@ const getOtherPartyForConversation = async (conversation, userId) => {
   if (isCustomer) {
     const seller = await Seller.findOne({
       where: { userId: otherUserId },
-      attributes: ["id", "storeName", "rating", "ratingCount"],
+      attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
     });
     storeName = seller?.storeName || null;
     sellerId = seller?.id || null;

@@ -30,8 +30,20 @@ const updatePassword = asyncWrapper(async (req, res) => {
 
 
 
+const checkStoreSlugAvailability = asyncWrapper(async (req, res) => {
+  const result = await profileService.checkStoreSlugAvailability(req.user.id, req.query.slug);
+  return apiResponse.sendSuccess(res, result, 200);
+});
+
+const updateStoreSlug = asyncWrapper(async (req, res) => {
+  const result = await profileService.updateStoreSlug(req.user.id, req.body.slug);
+  return apiResponse.sendSuccess(res, result, 200);
+});
+
 module.exports = {
   getSellerProfile,
   updateSellerProfile,
   updatePassword,
+  checkStoreSlugAvailability,
+  updateStoreSlug,
 };

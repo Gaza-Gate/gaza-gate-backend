@@ -373,7 +373,7 @@ const getCustomerSellerReviews = async (customerId, query = {}) => {
         {
           model: Seller,
           as: "seller",
-          attributes: ["id", "storeName", "rating", "ratingCount"],
+          attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
           include: [
             {
               model: User,

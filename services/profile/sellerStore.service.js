@@ -1,5 +1,4 @@
 const { Op } = require('sequelize');
-const Seller = require('../../models/seller.model');
 const Customer = require('../../models/customer.model');
 const User = require('../../models/user.model');
 const Product = require('../../models/product.model');
@@ -17,6 +16,7 @@ const {
   computeIsTrustedSeller,
 } = require('../../utils/navigation/sellerStoreLink.util');
 const { mapCustomerSummary } = require('../../utils/navigation/customerProfileLink.util');
+const { findSellerByStoreKey } = require('./storeSlug.service');
 const { getSellerOrderTrustStats } = require('../../utils/navigation/sellerTrustStats.util');
 const {
   getCustomersOrderTrustStats,
@@ -93,11 +93,12 @@ const mapReview = (review, orderTrust = null) => {
   };
 };
 
-const getPublicStore = async (sellerId) => {
-  const seller = await Seller.findOne({
-    where: { id: sellerId },
+// storeKey = store id, current slug, or an old slug (see findSellerByStoreKey)
+const getPublicStore = async (storeKey) => {
+  const found = await findSellerByStoreKey(storeKey, {
     attributes: [
       'id',
+      'slug',
       'storeName',
       'storeDescription',
       'rating',
@@ -114,7 +115,8 @@ const getPublicStore = async (sellerId) => {
     ],
   });
 
-  if (!seller) throw AppError.fail('Store not found.', 404);
+  if (!found) throw AppError.fail('Store not found.', 404);
+  const { seller } = found;
 
   const reviewsLimit = PAGINATION.DEFAULT_LIMIT;
   const productWhere = activeProductWhere(seller.id);
@@ -180,11 +182,13 @@ const getPublicStore = async (sellerId) => {
   return {
     store: {
       id: seller.id,
+      // current slug — the frontend replaces id / old-slug URLs with /store/<slug>
+      slug: seller.slug ?? null,
       storeName: seller.storeName,
       storeDescription: seller.storeDescription,
       rating: seller.rating,
       ratingCount: seller.ratingCount,
-      actionUrl: buildSellerStoreActionUrl(seller.id),
+      actionUrl: buildSellerStoreActionUrl(seller),
       avatar: seller.user?.avatar ?? null,
       isTrustedSeller: computeIsTrustedSeller({
         rating: seller.rating,
@@ -215,10 +219,9 @@ const getPublicStore = async (sellerId) => {
   };
 };
 
-const getStoreProducts = async (sellerId, query) => {
-  const seller = await Seller.findOne({
-    where: { id: sellerId },
-    attributes: ['id', 'storeName', 'rating', 'ratingCount'],
+const getStoreProducts = async (storeKey, query) => {
+  const found = await findSellerByStoreKey(storeKey, {
+    attributes: ['id', 'slug', 'storeName', 'rating', 'ratingCount'],
     include: [
       {
         model: User,
@@ -229,7 +232,8 @@ const getStoreProducts = async (sellerId, query) => {
       },
     ],
   });
-  if (!seller) throw AppError.fail('Store not found.', 404);
+  if (!found) throw AppError.fail('Store not found.', 404);
+  const { seller } = found;
 
   const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);
   const limit = PAGINATION.DEFAULT_LIMIT;

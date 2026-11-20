@@ -425,7 +425,7 @@ const summarizeDistribution = (distribution) => {
 const readSellerProductReviews = async (sellerId, query, visibility) => {
   const seller = await Seller.findOne({
     where: { id: sellerId },
-    attributes: ["id", "storeName", "rating", "ratingCount"],
+    attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
     include: [
       {
         model: User,
@@ -605,7 +605,7 @@ const readProductReviews = async (productId, query, visibility) => {
         {
           model: Seller,
           as: "seller",
-          attributes: ["id", "storeName", "rating", "ratingCount"],
+          attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
           include: [
             {
               model: User,
@@ -701,7 +701,7 @@ const getMyReviews = async (req) => {
       {
         model: Seller,
         as: "seller",
-        attributes: ["id", "storeName", "rating", "ratingCount"],
+        attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
         include: [
           {
             model: User,

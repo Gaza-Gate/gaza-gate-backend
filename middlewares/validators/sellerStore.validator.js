@@ -1,7 +1,15 @@
 const { param, query } = require("express-validator");
+const { STORE_SLUG_LIMITS } = require("../../constants/seller/storeSlug.constant.js");
+const { isUuid } = require("../../utils/navigation/storeSlug.util.js");
+
+// "/store/:sellerId" accepts the store id (old links, printed QR codes)
+// or the store slug (current or old): "/store/gift-store".
+const STORE_KEY_PATTERN = new RegExp(`^[a-zA-Z0-9-]{1,${STORE_SLUG_LIMITS.MAX}}$`);
 
 const getPublicStoreValidator = [
-  param("sellerId").isUUID().withMessage("sellerId must be a valid UUID"),
+  param("sellerId")
+    .custom((value) => isUuid(value) || STORE_KEY_PATTERN.test(value))
+    .withMessage("sellerId must be a store id or store link"),
 ];
 
 const getStoreProductsValidator = [

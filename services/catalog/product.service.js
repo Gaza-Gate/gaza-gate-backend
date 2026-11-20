@@ -36,7 +36,7 @@ const RECENT_REVIEWS_LIMIT = 3;
 const sellerSummaryInclude = {
   model: Seller,
   as: "seller",
-  attributes: ["id", "storeName", "rating", "ratingCount"],
+  attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
   include: [
     {
       model: User,
@@ -50,7 +50,7 @@ const publicSellerSummaryInclude = {
   model: Seller,
   as: "seller",
   required: true,
-  attributes: ["id", "storeName", "rating", "ratingCount"],
+  attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
   include: [
     {
       model: User,

@@ -26,7 +26,7 @@ const { computeOrderTotals } = require("../../utils/order/orderTotals.util.js");
 const sellerSummaryInclude = {
   model: Seller,
   as: "seller",
-  attributes: ["id", "storeName", "rating", "ratingCount"],
+  attributes: ["id", "slug", "storeName", "rating", "ratingCount"],
   include: [
     {
       model: User,

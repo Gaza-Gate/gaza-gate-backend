@@ -159,6 +159,7 @@ ${fromSql}
   const selectSql = `
 SELECT
   s.id,
+  s.slug,
   s.store_name AS storeName,
   s.rating,
   s.rating_count AS ratingCount,
@@ -194,7 +195,7 @@ const mapStoreRow = (row, gps) => ({
   street: row.street ?? null,
   latitude: Number(row.latitude),
   longitude: Number(row.longitude),
-  actionUrl: buildSellerStoreActionUrl(row.id),
+  actionUrl: buildSellerStoreActionUrl(row.id, row.slug),
 });
 
 const getMapStores = async (query = {}) => {
